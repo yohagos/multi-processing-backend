@@ -32,3 +32,7 @@ go.work.sum
 .vscode/
 
 *.yaml
+
+# Files for development
+
+migrations/json
