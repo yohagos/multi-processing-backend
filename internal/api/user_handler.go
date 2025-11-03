@@ -1,12 +1,14 @@
 package api
 
 import (
-	"net/http"
 	"context"
+	"net/http"
 	"strconv"
 
 	"multi-processing-backend/internal/core"
+
 	"github.com/gin-gonic/gin"
+	"golang.org/x/exp/slog"
 )
 
 type UserService interface {
@@ -31,6 +33,7 @@ func RegisterUserRoutes(rg *gin.RouterGroup, h *UserHandler) {
 }
 
 func (h *UserHandler) ListUsers(c *gin.Context) {
+	slog.Info("ListUsers from user_handler", "GET", "list of users", "Query", c.Query("page"))
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 
