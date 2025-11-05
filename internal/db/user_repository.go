@@ -24,7 +24,7 @@ func (r *UserRepository) List(
 	ctx context.Context,
 	page, limit int,
 ) ([]core.User, int64, error) {
-	slog.Info("List from user_repository", "Database", "get list of users")
+	//slog.Info("List from user_repository", "Database", "get list of users")
 	offset := (page - 1) * limit
 
 	var total int64
@@ -71,7 +71,7 @@ func (r *UserRepository) Create(
 	return u, nil
 }
 
-func (r *UserRepository) SeedIfEmpty(
+func (r *UserRepository) SeedUsersIfEmpty(
 	ctx context.Context,
 	jsonPath string,
 ) error {
