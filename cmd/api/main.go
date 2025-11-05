@@ -26,9 +26,20 @@ func main() {
 	pool := db.ConnectDatabase(ctx, cfg.DatabaseURL)
 	defer pool.Close()
 
+	db.ApplyMigrations(ctx, pool)
+
 	userRepo := db.NewUserRepository(pool)
+	userRepo.SeedUsersIfEmpty(ctx, "migrations/json/generated_names.json")
 	userService := services.NewUserService(userRepo)
 	userHandler := api.NewUserHandler(userService)
+
+	cryptoRepo := db.NewCryptoRepository(pool)
+	cryptoRepo.SeedCryptosIfEmpty(ctx, "migrations/json/generated_cryptos.json")
+	cryptoService := services.NewCryptoService(cryptoRepo)
+
+	go cryptoService.StartPriceTicker(ctx)
+
+	cryptoHandler := api.NewCryptoHandler(cryptoService)
 
 	router := gin.New()
 
@@ -41,6 +52,7 @@ func main() {
 	v1 := router.Group("/api")
 	{
 		api.RegisterUserRoutes(v1.Group("/user"), userHandler)
+		api.RegisterCryptoRoutes(v1.Group("/crypto"), cryptoHandler)
 	}
 
 	srv := &http.Server{
@@ -63,6 +75,7 @@ func main() {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	cryptoRepo.DeleteDevData(context.Background())
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server forced to shutdown", "error", err)
