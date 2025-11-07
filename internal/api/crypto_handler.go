@@ -15,7 +15,7 @@ import (
 )
 
 var upgrader = websocket.Upgrader{
-	ReadBufferSize: 1024,
+	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
 		return true
@@ -25,6 +25,8 @@ var upgrader = websocket.Upgrader{
 type CryptoService interface {
 	List(ctx context.Context, page, limit int) ([]core.Crypto, int64, error)
 	Create(ctx context.Context, initial string, name string, current_value float64) (core.Crypto, error)
+
+
 	GetLatestCryptos(ctx context.Context, limit int) ([]core.Crypto, error)
 }
 
@@ -87,8 +89,6 @@ func (h *CryptoHandler) HandleCryptoWS(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	slog.Info("websocket client connected", "remote", c.Request.RemoteAddr)
-
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
@@ -105,14 +105,12 @@ func (h *CryptoHandler) HandleCryptoWS(c *gin.Context) {
 		}
 	}()
 
-
 	for {
 		select {
 		case <-ctx.Done():
-			slog.Info("websocket client disconnected", "remote", c.Request.RemoteAddr)
 			return
 		case <-ticker.C:
-			cryptos, err := h.service.GetLatestCryptos(ctx, 10)
+			cryptos, err := h.service.GetLatestCryptos(ctx, 12)
 			if err != nil {
 				slog.Error("failed to fetch latest cryptos for ws", "error", err)
 				continue
@@ -127,8 +125,6 @@ func (h *CryptoHandler) HandleCryptoWS(c *gin.Context) {
 				slog.Error("websocket write failed", "error", err)
 				return
 			}
-
-			slog.Info("sent crypto update via websocket", "count", len(cryptos))
 		}
 	}
 }

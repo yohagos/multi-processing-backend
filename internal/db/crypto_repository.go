@@ -32,7 +32,7 @@ func (r *CryptoRepository) List(
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, initial, name, current_value, previous_value, percent, created_at
+		SELECT id, initial, name, current_value, previous_value, percent, created_at, is_initial
 		FROM crypto
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
@@ -47,7 +47,6 @@ func (r *CryptoRepository) List(
 	if err != nil {
 		return nil, 0, err
 	}
-	slog.Info("Found Cryptos from crypto_repository", "Database", cryptos)
 
 	return cryptos, total, nil
 }
@@ -135,7 +134,6 @@ func (r *CryptoRepository) SeedCryptosIfEmpty(
 		return err
 	}
 
-	slog.Info("Seed for Crypto inserted successfully", "count", cryptos)
 	return nil
 }
 
@@ -190,6 +188,6 @@ func (r *CryptoRepository) GetLatestCryptos(ctx context.Context, limit int) ([]c
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	return pgx.CollectRows(rows, pgx.RowToStructByPos[core.Crypto])
 }

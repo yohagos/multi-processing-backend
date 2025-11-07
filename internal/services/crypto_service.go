@@ -58,8 +58,6 @@ func (s *CryptoService) StartPriceTicker(ctx context.Context) {
 		return
 	}
 
-	slog.Info("starting crypto price ticker", "count", initial)
-
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
@@ -98,19 +96,11 @@ func (s *CryptoService) updateRandomCrypto(ctx context.Context, initial []core.C
 		IsInitial:     false,
 	}
 
-	created, err := s.repo.Create(ctx, newCrypto)
+	_, err = s.repo.Create(ctx, newCrypto)
 	if err != nil {
 		slog.Error("failed to create new crypto price", "name", base, "error", err)
 		return
 	}
-
-	slog.Info("crypto price updated",
-		"name", created.Name,
-		"initial", created.Initial,
-		"previous", created.PreviousValue,
-		"current", created.CurrentValue,
-		"changePrt", changePrt,
-	)
 }
 
 func roundFloat(val float64, precision int) float64 {
