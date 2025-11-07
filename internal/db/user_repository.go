@@ -24,7 +24,6 @@ func (r *UserRepository) List(
 	ctx context.Context,
 	page, limit int,
 ) ([]core.User, int64, error) {
-	//slog.Info("List from user_repository", "Database", "get list of users")
 	offset := (page - 1) * limit
 
 	var total int64
@@ -69,6 +68,80 @@ func (r *UserRepository) Create(
 	}
 
 	return u, nil
+}
+
+func (r *UserRepository) Get(ctx context.Context, id string) (core.User, error) {
+	var u core.User
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, email, first_name, last_name, created_at, updated_at
+		FROM users 
+		WHERE id = $1
+	`, id).Scan(
+		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.CreatedAt, &u.UpdatedAt,
+	)
+	if err != nil {
+		return core.User{}, err
+	}
+	return u, nil
+}
+
+func (r *UserRepository) Update(
+	ctx context.Context,
+	id string,
+	updates core.UserUpdate,
+) (core.User, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return core.User{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	query := `UPDATE users SET`
+	args := []interface{}{}
+	argID := 1
+
+	if updates.FirstName != nil {
+		query += `first_name = $` + string(rune(argID)) + `, `
+		args = append(args, *updates.FirstName)
+		argID++
+	}
+	if updates.LastName != nil {
+		query += `last_name = $` + string(rune(argID)) + `, `
+		args = append(args, *updates.LastName)
+		argID++
+	}
+	if updates.Email != nil {
+		query += `email = $` + string(rune(argID)) + `, `
+		args = append(args, *updates.Email)
+		argID++
+	}
+
+	query = query[:len(query)-3] + `, updated_at = NOW() WHERE id = $` + string(rune(argID))
+	args = append(args, id)
+
+	if _, err := tx.Exec(ctx, query, args...); err != nil {
+		return core.User{}, err
+	}
+
+	var u core.User
+	if err := tx.QueryRow(ctx, `
+		SELECT id, email, first_name, last_name, created_at, updated_at
+		FROM users WHERE id = $1
+	`, id).Scan(
+		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.CreatedAt, &u.UpdatedAt,
+	); err != nil {
+		return core.User{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return core.User{}, err
+	}
+	return u, nil
+}
+
+func (r *UserRepository) Delete(ctx context.Context, id string) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	return err
 }
 
 func (r *UserRepository) SeedUsersIfEmpty(
@@ -121,6 +194,14 @@ func (r *UserRepository) SeedUsersIfEmpty(
 		return err
 	}
 
-	slog.Info("User seed inserted successfully", "count", len(users))
 	return nil
+}
+
+func (r *UserRepository) DeleteDevData(ctx context.Context) {
+	_, err := r.pool.Exec(ctx, `DROP TABLE users`)
+	if err != nil {
+		slog.Error("Could not delete Users Table before shutting down", "DatabaseError", err)
+		return
+	}
+	slog.Info("Dropped Users Table successfully")
 }

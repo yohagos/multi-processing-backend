@@ -9,6 +9,10 @@ import (
 type UserRepository interface {
 	List(ctx context.Context, page, limit int) ([]core.User, int64, error)
 	Create(ctx context.Context, u core.User) (core.User, error)
+
+	Get(ctx context.Context, id string) (core.User, error)
+	Update(ctx context.Context, id string, updates core.UserUpdate) (core.User, error)
+	Delete(ctx context.Context, id string) error
 }
 
 type UserService struct {
@@ -30,4 +34,16 @@ func (s *UserService) Create(ctx context.Context, email, firstName, lastName str
 		LastName:  lastName,
 	}
 	return s.repo.Create(ctx, user)
+}
+
+func (s *UserService) Get(ctx context.Context, id string) (core.User, error) {
+	return s.repo.Get(ctx, id)
+}
+
+func (s *UserService) Update(ctx context.Context, id string, updates core.UserUpdate) (core.User, error) {
+	return s.repo.Update(ctx, id, updates)
+}
+
+func (s *UserService) Delete(ctx context.Context, id string) error {
+	return s.repo.Delete(ctx, id)
 }
