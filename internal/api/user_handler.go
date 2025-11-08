@@ -8,13 +8,12 @@ import (
 	"multi-processing-backend/internal/core"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/exp/slog"
 )
 
 type UserService interface {
 	List(ctx context.Context, page, limit int) ([]core.User, int64, error)
 	Create(ctx context.Context, email, firstName, lastName string) (core.User, error)
-	
+
 	Get(ctx context.Context, id string) (core.User, error)
 	Update(ctx context.Context, id string, updates core.UserUpdate) (core.User, error)
 	Delete(ctx context.Context, id string) error
@@ -40,7 +39,6 @@ func RegisterUserRoutes(rg *gin.RouterGroup, h *UserHandler) {
 }
 
 func (h *UserHandler) ListUsers(c *gin.Context) {
-	slog.Info("ListUsers from user_handler", "GET", "list of users", "Query", c.Query("page"))
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 
@@ -50,8 +48,13 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 		return
 	}
 
-	c.Header("X-Total-Count", strconv.FormatInt(total, 10))
-	c.JSON(http.StatusOK, users)
+	response := core.UserPaginationResponse{
+		Data:  users,
+		Total: total,
+		Error: nil,
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 func (h *UserHandler) CreateUser(c *gin.Context) {

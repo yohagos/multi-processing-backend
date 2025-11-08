@@ -16,3 +16,9 @@ type UserUpdate struct {
 	FirstName *string `json:"first_name"`
 	LastName  *string `json:"last_name"`
 }
+
+type UserPaginationResponse struct {
+	Data []User `json:"data"`
+	Total int64 `json:"total"`
+	Error error `json:"error"`
+}

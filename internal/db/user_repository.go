@@ -47,7 +47,6 @@ func (r *UserRepository) List(
 	if err != nil {
 		return nil, 0, err
 	}
-	slog.Info("Found Users from user_reposiory", "Database", users)
 
 	return users, total, nil
 }
