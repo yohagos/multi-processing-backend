@@ -4,10 +4,12 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"multi-processing-backend/internal/core"
 
 	"github.com/gin-gonic/gin"
+	
 )
 
 type UserService interface {
@@ -90,6 +92,7 @@ func (h *UserHandler) GetUserById(c *gin.Context) {
 
 func (h *UserHandler) UpdateUser(c *gin.Context) {
 	id := c.Param("id")
+
 	var req core.UserUpdate
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -98,6 +101,10 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 
 	updated, err := h.service.Update(c.Request.Context(), id, req)
 	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

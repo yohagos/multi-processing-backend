@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 
 	"multi-processing-backend/internal/core"
@@ -87,55 +89,45 @@ func (r *UserRepository) Get(ctx context.Context, id string) (core.User, error) 
 func (r *UserRepository) Update(
 	ctx context.Context,
 	id string,
-	updates core.UserUpdate,
+	update core.UserUpdate,
 ) (core.User, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return core.User{}, err
-	}
-	defer tx.Rollback(ctx)
+	var user core.User
 
-	query := `UPDATE users SET`
-	args := []interface{}{}
-	argID := 1
-
-	if updates.FirstName != nil {
-		query += `first_name = $` + string(rune(argID)) + `, `
-		args = append(args, *updates.FirstName)
-		argID++
-	}
-	if updates.LastName != nil {
-		query += `last_name = $` + string(rune(argID)) + `, `
-		args = append(args, *updates.LastName)
-		argID++
-	}
-	if updates.Email != nil {
-		query += `email = $` + string(rune(argID)) + `, `
-		args = append(args, *updates.Email)
-		argID++
-	}
-
-	query = query[:len(query)-3] + `, updated_at = NOW() WHERE id = $` + string(rune(argID))
-	args = append(args, id)
-
-	if _, err := tx.Exec(ctx, query, args...); err != nil {
-		return core.User{}, err
-	}
-
-	var u core.User
-	if err := tx.QueryRow(ctx, `
+	err := r.pool.QueryRow(ctx, `
 		SELECT id, email, first_name, last_name, created_at, updated_at
 		FROM users WHERE id = $1
 	`, id).Scan(
-		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.CreatedAt, &u.UpdatedAt,
-	); err != nil {
+		&user.ID, &user.Email, &user.FirstName, &user.LastName,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return core.User{}, fmt.Errorf("user not found")
+		}
 		return core.User{}, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	if update.Email != nil {
+		user.Email = *update.Email
+	}
+	if update.FirstName != nil {
+		user.FirstName = *update.FirstName
+	}
+	if update.LastName != nil {
+		user.LastName = *update.LastName
+	}
+
+	_, err = r.pool.Exec(ctx, `
+		UPDATE users
+		SET email = $1, first_name = $2, last_name = $3, updated_at = NOW()
+		WHERE id = $4
+	`, user.Email, user.FirstName, user.LastName, id)
+	if err != nil {
 		return core.User{}, err
 	}
-	return u, nil
+
+	return user, nil
 }
 
 func (r *UserRepository) Delete(ctx context.Context, id string) error {
