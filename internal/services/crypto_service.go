@@ -81,10 +81,10 @@ func (s *CryptoService) updateRandomCrypto(ctx context.Context, initial []core.C
 		return
 	}
 
-	changePrt := (rand.Float64() * 400) - 200
+	changePrt := (rand.Float64() * 200) - 100
 	changeFactor := 1 + (changePrt / 100)
 
-	newValue := latest.CurrentValue * changeFactor
+	newValue := latest.CurrentValue * roundFloat(changeFactor, 4)
 
 	newCrypto := core.Crypto{
 		Name:          latest.Name,
