@@ -34,5 +34,5 @@ go.work.sum
 *.yaml
 
 # Files for development
-
+notes.txt
 migrations/json
