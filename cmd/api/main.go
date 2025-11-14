@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,14 +28,18 @@ func main() {
 	defer pool.Close()
 
 	db.ApplyMigrations(ctx, pool)
+	seeder := db.NewSeeder(pool)
+	if err := seeder.SeedAll(ctx, "migrations/json/employment"); err != nil {
+		log.Fatal("Seeding failed", err)
+		os.Exit(100)
+	}
 
 	userRepo := db.NewUserRepository(pool)
-	userRepo.SeedUsersIfEmpty(ctx, "migrations/json/generated_names.json")
 	userService := services.NewUserService(userRepo)
 	userHandler := api.NewUserHandler(userService)
 
 	cryptoRepo := db.NewCryptoRepository(pool)
-	cryptoRepo.SeedCryptosIfEmpty(ctx, "migrations/json/generated_cryptos.json")
+	cryptoRepo.SeedCryptosIfEmpty(ctx, "migrations/json/crypto/generated_cryptos.json")
 	cryptoService := services.NewCryptoService(cryptoRepo)
 
 	go cryptoService.StartPriceTicker(ctx)
@@ -75,6 +80,9 @@ func main() {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	slog.Warn("Dropping Tables for Employments")
+	seeder.DeleteDevData(context.Background())
 	cryptoRepo.DeleteDevData(context.Background())
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
