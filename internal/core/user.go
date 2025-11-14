@@ -31,6 +31,6 @@ type UserPaginationResponse struct {
 type UserSkill struct {
 	UserID           string    `json:"user_id" db:"user_id"`
 	SkillID          string    `json:"skill_id" db:"skill_id"`
-	ProficiencyLevel string    `json:"proficiency_level" db:"proficiency_level"`
+	ProficiencyLevel int    `json:"proficiency_level" db:"proficiency_level"`
 	AcquiredDate     time.Time `json:"acquired_date" db:"acquired_date"`
 }
