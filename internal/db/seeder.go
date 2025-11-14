@@ -419,37 +419,37 @@ func (s *Seeder) getAllSkills(ctx context.Context) []core.Skill {
 }
 
 func (s *Seeder) DeleteDevData(ctx context.Context) {
-	_, err := s.pool.Exec(ctx, `DROP TABLE departments`)
+	_, err := s.pool.Exec(ctx, `DROP TABLE departments CASCADE`)
 	if err != nil {
 
 	}
 
-	_, err = s.pool.Exec(ctx, `DROP TABLE positions`)
+	_, err = s.pool.Exec(ctx, `DROP TABLE positions CASCADE`)
 	if err != nil {
 
 	}
 
-	_, err = s.pool.Exec(ctx, `DROP TABLE users`)
+	_, err = s.pool.Exec(ctx, `DROP TABLE users CASCADE`)
 	if err != nil {
 
 	}
 
-	_, err = s.pool.Exec(ctx, `DROP TABLE salaries`)
+	_, err = s.pool.Exec(ctx, `DROP TABLE salaries CASCADE`)
 	if err != nil {
 
 	}
 
-	_, err = s.pool.Exec(ctx, `DROP TABLE addresses`)
+	_, err = s.pool.Exec(ctx, `DROP TABLE addresses CASCADE`)
 	if err != nil {
 
 	}
 
-	_, err = s.pool.Exec(ctx, `DROP TABLE skills`)
+	_, err = s.pool.Exec(ctx, `DROP TABLE skills CASCADE`)
 	if err != nil {
 
 	}
 
-	_, err = s.pool.Exec(ctx, `DROP TABLE user_skills`)
+	_, err = s.pool.Exec(ctx, `DROP TABLE user_skills CASCADE`)
 	if err != nil {
 
 	}
