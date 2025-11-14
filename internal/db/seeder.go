@@ -8,19 +8,29 @@ import (
 	"multi-processing-backend/internal/core"
 	"os"
 	"path/filepath"
+	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/exp/slog"
 )
 
 var (
-	departments []core.Departments
-	positions   []core.Position
+	insertedDepartments []core.Departments
+	insertedPositions   []core.Position
+	insertedUsers       []core.User
+	insertedSkills      []core.Skill
+	insertedAddresses   []core.Address
+	insertedSalaries    []core.Salary
+
+	assignedUserSkills = make(map[UserSkillkey]bool)
 )
 
 type Seeder struct {
 	pool *pgxpool.Pool
+}
+
+type UserSkillkey struct {
+	UserID  string
+	SkillID string
 }
 
 func NewSeeder(pool *pgxpool.Pool) *Seeder {
@@ -28,7 +38,6 @@ func NewSeeder(pool *pgxpool.Pool) *Seeder {
 }
 
 func (s *Seeder) SeedAll(ctx context.Context, basePath string) error {
-	slog.Info("Seeder started")
 	seedOrder := []struct {
 		tableName string
 		jsonFile  string
@@ -44,8 +53,6 @@ func (s *Seeder) SeedAll(ctx context.Context, basePath string) error {
 	}
 
 	for _, seed := range seedOrder {
-		jsonPath := filepath.Join(basePath, seed.jsonFile)
-
 		var count int
 		err := s.pool.QueryRow(ctx, "SELECT COUNT(*) FROM "+seed.tableName).Scan(&count)
 		if err != nil {
@@ -53,11 +60,11 @@ func (s *Seeder) SeedAll(ctx context.Context, basePath string) error {
 		}
 
 		if count > 0 {
-			slog.Info("Table already has data, skipping", "table", seed.tableName)
+
 			continue
 		}
 
-		slog.Info("Seeding table", "table", seed.tableName)
+		jsonPath := filepath.Join(basePath, seed.jsonFile)
 		if err := seed.seedFunc(ctx, jsonPath); err != nil {
 			return fmt.Errorf("seeding %s: %w", seed.tableName, err)
 		}
@@ -66,18 +73,13 @@ func (s *Seeder) SeedAll(ctx context.Context, basePath string) error {
 }
 
 func (s *Seeder) seedDepartments(ctx context.Context, jsonPath string) error {
-	slog.Info("Seeder | Departments started")
+
 	data, err := os.ReadFile(jsonPath)
 	if err != nil {
 		return err
 	}
 
-	var departments []struct {
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		CreatedAt   string `json:"created_at"`
-	}
-
+	var departments []core.Departments
 	if err := json.Unmarshal(data, &departments); err != nil {
 		return err
 	}
@@ -89,39 +91,35 @@ func (s *Seeder) seedDepartments(ctx context.Context, jsonPath string) error {
 	defer tx.Rollback(ctx)
 
 	for _, d := range departments {
-		_, err := tx.Exec(ctx, `
+		var dep core.Departments
+		err = tx.QueryRow(ctx, `
 			INSERT INTO departments (name, description, created_at)
 			VALUES ($1, $2, $3)
-		`, d.Name, d.Description, d.CreatedAt)
+			RETURNING id, name, description, created_at
+		`, d.Name, d.Description, d.CreatedAt).Scan(
+			&dep.ID, &dep.Name, &dep.Description, &dep.CreatedAt,
+		)
 		if err != nil {
 			return err
 		}
+		insertedDepartments = append(insertedDepartments, dep)
+
 	}
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Seeder) seedPositions(ctx context.Context, jsonPath string) error {
-	slog.Info("Seeder | Positions started")
+
 	data, err := os.ReadFile(jsonPath)
 	if err != nil {
 		return err
 	}
-
-	deps, err := s.pool.Query(ctx, "SELECT * FROM departments")
-	if err != nil {
-		slog.Warn("getting departments failed")
-		return err
-	}
-	departments, _ = pgx.CollectRows(deps, pgx.RowToStructByPos[core.Departments])
-
-	var positions []struct {
-		Title        string `json:"title"`
-		Level        int    `json:"level"`
-		DepartmentID string `json:"department_id"`
-		CreatedAt    string `json:"created_at"`
-	}
-
+	var positions []core.Position
 	if err := json.Unmarshal(data, &positions); err != nil {
 		return err
 	}
@@ -134,54 +132,52 @@ func (s *Seeder) seedPositions(ctx context.Context, jsonPath string) error {
 
 	for _, p := range positions {
 		dep := getRandomDepartment()
-		_, err := tx.Exec(ctx, `
-			INSERT INTO positions (id, title, level, department_id, created_at)
-			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (id) DO NOTHING
-		`, p.Title, p.Level, dep.ID, p.CreatedAt)
+		//
+		var pos core.Position
+		err := tx.QueryRow(ctx, `
+			INSERT INTO positions (title, level, department_id, created_at)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id, title, level, department_id, created_at
+		`, p.Title, p.Level, dep.ID, p.CreatedAt).Scan(
+			&pos.ID, &pos.Title, &pos.Level, &pos.DepartmentID, &pos.CreatedAt,
+		)
 		if err != nil {
 			return nil
 		}
+		insertedPositions = append(insertedPositions, pos)
+
 	}
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func getRandomDepartment() core.Departments {
-	return departments[rand.Intn(len(departments))]
+
+	return insertedDepartments[rand.Intn(len(insertedDepartments))]
 }
 
 func getRandomPosition() core.Position {
-	return positions[rand.Intn(len(positions))]
+
+	return insertedPositions[rand.Intn(len(insertedPositions))]
+}
+
+func getRandomUser() core.User {
+	return insertedUsers[rand.Intn(len(insertedUsers))]
 }
 
 func (s *Seeder) seedUsers(ctx context.Context, jsonPath string) error {
-	slog.Info("Seeder | Users started")
+
 	data, err := os.ReadFile(jsonPath)
 	if err != nil {
 		return err
 	}
-
-	pos, err := s.pool.Query(ctx, "SELECT * FROM positions")
-	if err != nil {
-		slog.Warn("Positions table is empty")
-	}
-	positions, _ = pgx.CollectRows(pos, pgx.RowToStructByPos[core.Position])
-	slog.Warn("Positions seed", "data", positions)
-
-	var users []struct {
-		Email        string `json:"email"`
-		FirstName    string `json:"first_name"`
-		LastName     string `json:"last_name"`
-		DepartmentID string `json:"department_id"`
-		PositionID   string `json:"position_id"`
-		HireDate     string `json:"hire_date"`
-		Phone        string `json:"phone"`
-		DateOfBirth  string `json:"date_of_birth"`
-	}
-
+	var users []core.User
 	if err := json.Unmarshal(data, &users); err != nil {
-		return nil
+		return err
 	}
 
 	tx, err := s.pool.Begin(ctx)
@@ -191,40 +187,41 @@ func (s *Seeder) seedUsers(ctx context.Context, jsonPath string) error {
 	defer tx.Rollback(ctx)
 
 	for _, u := range users {
-		dep := getRandomDepartment()
 		posi := getRandomPosition()
-		_, err := tx.Exec(ctx, `
+		var user core.User
+
+		err = tx.QueryRow(ctx, `
 			INSERT INTO users (email, first_name, last_name, department_id, position_id, hire_date, phone, date_of_birth)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-			ON CONFLICT (id) DO NOTHING
-		`, u.Email, u.FirstName, u.LastName, dep.ID,
-			posi.ID, u.HireDate, u.Phone, u.DateOfBirth)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			RETURNING id, email, first_name, last_name, department_id, position_id, hire_date, phone, date_of_birth
+		`, u.Email, u.FirstName, u.LastName, posi.DepartmentID,
+			posi.ID, u.HireDate, u.Phone, u.DateOfBirth).Scan(
+			&user.ID, &user.Email, &user.FirstName, &user.LastName, &user.DepartmentID,
+			&user.PositionID, &user.HireDate, &user.Phone, &user.DateOfBirth,
+		)
 		if err != nil {
 			return err
 		}
+		insertedUsers = append(insertedUsers, user)
 	}
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Seeder) seedSalaries(ctx context.Context, jsonPath string) error {
-	slog.Info("Seeder | Salaries started")
+
 	data, err := os.ReadFile(jsonPath)
 	if err != nil {
 		return err
 	}
-
-	var salaries []struct {
-		UserID        string  `json:"user_id"`
-		Amount        float64 `json:"amount"`
-		EffectiveDate string  `json:"effective_date"`
-		CreatedAt     string  `json:"created_date"`
-	}
-
+	var salaries []core.Salary
 	if err := json.Unmarshal(data, &salaries); err != nil {
 		return err
 	}
-
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -232,40 +229,39 @@ func (s *Seeder) seedSalaries(ctx context.Context, jsonPath string) error {
 	defer tx.Rollback(ctx)
 
 	for _, l := range salaries {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO salaries (id, user_id, amount, effective_date, created_at)
-			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT (id) DO NOTHING
-		`, l.UserID, l.Amount, l.EffectiveDate, l.CreatedAt)
+		user := getRandomUser()
+		var sal core.Salary
+		err = tx.QueryRow(ctx, `
+			INSERT INTO salaries (user_id, amount, effective_date, created_at)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id, user_id, amount, effective_date, created_at
+		`, user.ID, l.Amount, l.EffectiveDate, l.CreatedAt).Scan(
+			&sal.ID, &sal.UserID, &sal.Amount, &sal.EffectiveDate, &sal.CreatedAt,
+		)
 		if err != nil {
 			return err
 		}
+
+		insertedSalaries = append(insertedSalaries, sal)
 	}
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Seeder) seedAddresses(ctx context.Context, jsonPath string) error {
-	slog.Info("Seeder | Addresses started")
+
 	data, err := os.ReadFile(jsonPath)
 	if err != nil {
 		return err
 	}
-
-	var addresses []struct {
-		UserID    string `json:"user_id"`
-		Street    string `json:"street"`
-		City      string `json:"city"`
-		ZipCode   string `json:"zip_code"`
-		Country   string `json:"country"`
-		IsPrimary bool   `json:"is_primary"`
-		CreatedAt string `json:"created_at"`
-	}
-
+	var addresses []core.Address
 	if err := json.Unmarshal(data, &addresses); err != nil {
 		return err
 	}
-
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -273,36 +269,40 @@ func (s *Seeder) seedAddresses(ctx context.Context, jsonPath string) error {
 	defer tx.Rollback(ctx)
 
 	for _, a := range addresses {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO addresses (id, user_id, street, city, zip_code, country, is_primary, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			ON CONFLICT (id) DO NOTHING
-		`, a.UserID, a.Street, a.City, a.ZipCode, a.Country, a.IsPrimary, a.CreatedAt)
+		user := getRandomUser()
+		var add core.Address
+		err = tx.QueryRow(ctx, `
+			INSERT INTO addresses (user_id, street, city, zip_code, country, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING id, user_id, street, city, zip_code, country, is_primary, created_at
+		`, user.ID, a.Street, a.City, a.ZipCode, a.Country, a.CreatedAt).Scan(
+			&add.ID, &add.UserID, &add.Street, &add.City, &add.ZipCode,
+			&add.Country, &add.IsPrimary, &add.CreatedAt,
+		)
 		if err != nil {
 			return err
 		}
+		insertedAddresses = append(insertedAddresses, add)
 	}
 
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Seeder) seedSkills(ctx context.Context, jsonPath string) error {
-	slog.Info("Seeder | Skills started")
+
 	data, err := os.ReadFile(jsonPath)
 	if err != nil {
 		return err
 	}
 
-	var skills []struct {
-		Name      string `json:"name"`
-		Category  string `json:"category"`
-		CreatedAt string `json:"created_at"`
-	}
-
+	var skills []core.Skill
 	if err := json.Unmarshal(data, &skills); err != nil {
 		return err
 	}
-
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -310,33 +310,35 @@ func (s *Seeder) seedSkills(ctx context.Context, jsonPath string) error {
 	defer tx.Rollback(ctx)
 
 	for _, k := range skills {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO skills (id, name, category, created_at)
-			VALUES ($1, $2, $3, $4)
-			ON CONFLICT (id) DO NOTHING
-		`, k.Name, k.Category, k.CreatedAt)
+		var sk core.Skill
+		err = tx.QueryRow(ctx, `
+			INSERT INTO skills (name, category, created_at)
+			VALUES ($1, $2, $3)
+			RETURNING id, name, category, created_at
+		`, k.Name, k.Category, k.CreatedAt).Scan(
+			&sk.ID, &sk.Name, &sk.Category, &sk.CreatedAt,
+		)
 		if err != nil {
 			return err
 		}
+		insertedSkills = append(insertedSkills, sk)
 	}
-	return tx.Commit(ctx)
+
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Seeder) seedUsersSkills(ctx context.Context, jsonPath string) error {
-	slog.Info("Seeder | UserSkills started")
+
 	data, err := os.ReadFile(jsonPath)
 	if err != nil {
 		return err
 	}
-
-	var userSkills []struct {
-		UserID           string `json:"user_id"`
-		SkillID          string `json:"skill_id"`
-		ProficiencyLevel string `json:"proficiency_level"`
-		AcquiredDate     string `json:"acquired_date"`
-	}
-
-	if err := json.Unmarshal(data, &userSkills); err != nil {
+	var user_skills []core.UserSkill
+	if err := json.Unmarshal(data, &user_skills); err != nil {
 		return err
 	}
 
@@ -346,53 +348,109 @@ func (s *Seeder) seedUsersSkills(ctx context.Context, jsonPath string) error {
 	}
 	defer tx.Rollback(ctx)
 
-	for _, us := range userSkills {
+	skills := s.getAllSkills(ctx)
+	users := s.getAllUsers(ctx)
+
+	for range users {
+		var userID, skillID string
+		var key UserSkillkey
+
+		for attempts := 0; attempts < len(users); attempts++ {
+			userID = users[rand.Intn(len(users))].ID
+			skillID = skills[rand.Intn(len(skills))].ID
+			key = UserSkillkey{UserID: userID, SkillID: skillID}
+
+			if !assignedUserSkills[key] {
+				break
+			}
+		}
+
+		if assignedUserSkills[key] {
+			continue
+		}
+
 		_, err := tx.Exec(ctx, `
 			INSERT INTO user_skills (user_id, skill_id, proficiency_level, acquired_date)
 			VALUES ($1, $2, $3, $4)
-			ON CONFLICT (user_id, skill_id) DO NOTHING
-		`, us.UserID, us.SkillID, us.ProficiencyLevel, us.AcquiredDate)
+		`, userID, skillID, rand.Intn(5)+1, time.Now().AddDate(0, -rand.Intn(24), 0))
 		if err != nil {
 			return err
 		}
-	}
 
+		assignedUserSkills[key] = true
+	}
 	return tx.Commit(ctx)
+}
+
+func (s *Seeder) getAllUsers(ctx context.Context) []core.User {
+	rows, err := s.pool.Query(ctx, "SELECT id FROM users")
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var users []core.User
+	for rows.Next() {
+		var user core.User
+		if err := rows.Scan(&user.ID); err != nil {
+			continue
+		}
+		users = append(users, user)
+	}
+	return users
+}
+
+func (s *Seeder) getAllSkills(ctx context.Context) []core.Skill {
+	rows, err := s.pool.Query(ctx, "SELECT id FROM skills")
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var skills []core.Skill
+	for rows.Next() {
+		var skill core.Skill
+		if err := rows.Scan(&skill.ID); err != nil {
+			continue
+		}
+		skills = append(skills, skill)
+	}
+	return skills
 }
 
 func (s *Seeder) DeleteDevData(ctx context.Context) {
 	_, err := s.pool.Exec(ctx, `DROP TABLE departments`)
 	if err != nil {
-		slog.Warn("Seeder | could not delete departments table")
+
 	}
 
 	_, err = s.pool.Exec(ctx, `DROP TABLE positions`)
 	if err != nil {
-		slog.Warn("Seeder | could not delete positions table")
+
 	}
 
 	_, err = s.pool.Exec(ctx, `DROP TABLE users`)
 	if err != nil {
-		slog.Warn("Seeder | could not delete users table")
+
 	}
 
 	_, err = s.pool.Exec(ctx, `DROP TABLE salaries`)
 	if err != nil {
-		slog.Warn("Seeder | could not delete salaries table")
+
 	}
 
 	_, err = s.pool.Exec(ctx, `DROP TABLE addresses`)
 	if err != nil {
-		slog.Warn("Seeder | could not delete addresses table")
+
 	}
 
 	_, err = s.pool.Exec(ctx, `DROP TABLE skills`)
 	if err != nil {
-		slog.Warn("Seeder | could not delete skills table")
+
 	}
 
 	_, err = s.pool.Exec(ctx, `DROP TABLE user_skills`)
 	if err != nil {
-		slog.Warn("Seeder | could not delete user_skills table")
+
 	}
 }
