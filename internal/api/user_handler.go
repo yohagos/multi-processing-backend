@@ -14,7 +14,7 @@ import (
 
 type UserService interface {
 	List(ctx context.Context, page, limit int) ([]core.User, int64, error)
-	Create(ctx context.Context, email, firstName, lastName string) (core.User, error)
+	Create(ctx context.Context, user core.User) (core.User, error)
 
 	Get(ctx context.Context, id string) (core.User, error)
 	Update(ctx context.Context, id string, updates core.UserUpdate) (core.User, error)
@@ -60,18 +60,14 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 }
 
 func (h *UserHandler) CreateUser(c *gin.Context) {
-	var req struct {
-		Email     string `json:"email" binding:"required,email"`
-		FirstName string `json:"first_name" binding:"required"`
-		LastName  string `json:"last_name" binding:"required"`
-	}
+	var req core.User
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	user, err := h.service.Create(c.Request.Context(), req.Email, req.FirstName, req.LastName)
+	user, err := h.service.Create(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
