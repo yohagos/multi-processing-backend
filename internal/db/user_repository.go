@@ -71,7 +71,10 @@ func (r *UserRepository) Create(
 	return u, nil
 }
 
-func (r *UserRepository) Get(ctx context.Context, id string) (core.User, error) {
+func (r *UserRepository) Get(
+	ctx context.Context, 
+	id string,
+) (core.User, error) {
 	var u core.User
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, email, first_name, last_name, department_id, position_id, hire_date, phone, date_of_birth, created_at, updated_at
