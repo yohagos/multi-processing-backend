@@ -25,12 +25,12 @@ func (r *DepartmentRepository) List(
 	offset := (page - 1) * limit
 
 	var total int64
-	if err := r.pool.QueryRow(ctx, "SELECT * FROM departments").Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM departments").Scan(&total); err != nil {
 		return nil, 0, err
 	}
-
+	
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, name, description, created_at
+		SELECT id, name, description, created_at, updated_at
 		FROM departments
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2

@@ -30,15 +30,15 @@ func NewDepartmentHandler(service DepartmentService) *DepartmentHandler {
 func RegisterDepartmentRoutes(rg *gin.RouterGroup, h *DepartmentHandler) {
 	deps := rg.Group("")
 	{
-		deps.GET("")
-		deps.POST("")
-		deps.GET("/:id")
-		deps.PATCH("/:id")
-		deps.DELETE("/:id")
+		deps.GET("", h.List)
+		deps.POST("", h.Create)
+		deps.GET("/:id", h.Get)
+		deps.PATCH("/:id", h.Update)
+		deps.DELETE("/:id", h.Delete)
 	}
 }
 
-func (h *DepartmentHandler) ListDepartments(c *gin.Context) {
+func (h *DepartmentHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultPostForm("limit", "10"))
 
@@ -49,7 +49,7 @@ func (h *DepartmentHandler) ListDepartments(c *gin.Context) {
 	}
 
 	response := core.DepartmentsPagination{
-		Data: deps,
+		Data:  deps,
 		Total: total,
 		Error: err,
 	}
@@ -74,7 +74,7 @@ func (h *DepartmentHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, dep)
 }
 
-func (h *DepartmentHandler) GetById(c *gin.Context) {
+func (h *DepartmentHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 	dep, err := h.service.Get(c.Request.Context(), id)
 	if err != nil {
@@ -115,4 +115,3 @@ func (h *DepartmentHandler) Delete(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
-

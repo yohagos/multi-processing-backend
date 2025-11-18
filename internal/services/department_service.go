@@ -33,10 +33,6 @@ func (s *DepartmentService) Create(
 	ctx context.Context,
 	dep core.Departments,
 ) (core.Departments, error) {
-	/* dep := core.Departments{
-		Name: name,
-		Description: description,
-	} */
 	return s.repo.Create(ctx, dep)
 }
 
