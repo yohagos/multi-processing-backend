@@ -2,55 +2,54 @@ package api
 
 import (
 	"context"
+	"multi-processing-backend/internal/core"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"multi-processing-backend/internal/core"
-
 	"github.com/gin-gonic/gin"
 )
 
-type UserService interface {
-	List(ctx context.Context, page, limit int) ([]core.User, int64, error)
-	Create(ctx context.Context, user core.User) (core.User, error)
+type PositionService interface {
+	List(ctx context.Context, page, limit int) ([]core.Position, int64, error)
+	Create(ctx context.Context, user core.Position) (core.Position, error)
 
-	Get(ctx context.Context, id string) (core.User, error)
-	Update(ctx context.Context, id string, updates core.UserUpdate) (core.User, error)
+	Get(ctx context.Context, id string) (core.Position, error)
+	Update(ctx context.Context, id string, updates core.PositionUpdate) (core.Position, error)
 	Delete(ctx context.Context, id string) error
 }
 
-type UserHandler struct {
-	service UserService
+type PositionHandler struct {
+	service PositionService
 }
 
-func NewUserHandler(service UserService) *UserHandler {
-	return &UserHandler{service: service}
+func NewPositionHandler(service PositionService) *PositionHandler {
+	return &PositionHandler{service: service}
 }
 
-func RegisterUserRoutes(rg *gin.RouterGroup, h *UserHandler) {
-	users := rg.Group("")
+func RegisterPositionRoutes(rg *gin.RouterGroup, h *PositionHandler) {
+	pos := rg.Group("")
 	{
-		users.GET("", h.ListUsers)
-		users.POST("", h.CreateUser)
-		users.GET("/:id", h.GetUserById)
-		users.PATCH("/:id", h.UpdateUser)
-		users.DELETE("/:id", h.DeleteUserById)
+		pos.GET("", h.List)
+		pos.POST("", h.Create)
+		pos.GET("/:id", h.Get)
+		pos.PATCH("/:id", h.Update)
+		pos.DELETE("/:id", h.Delete)
 	}
 }
 
-func (h *UserHandler) ListUsers(c *gin.Context) {
+func (h *PositionHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 
-	users, total, err := h.service.List(c.Request.Context(), page, limit)
+	pos, total, err := h.service.List(c.Request.Context(), page, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	response := core.UserPagination{
-		Data:  users,
+	response := core.PositionPagination{
+		Data:  pos,
 		Total: total,
 		Error: nil,
 	}
@@ -58,8 +57,8 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func (h *UserHandler) CreateUser(c *gin.Context) {
-	var req core.User
+func (h *PositionHandler) Create(c *gin.Context) {
+	var req core.Position
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -75,20 +74,20 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	c.JSON(http.StatusCreated, user)
 }
 
-func (h *UserHandler) GetUserById(c *gin.Context) {
+func (h *PositionHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 	user, err := h.service.Get(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "position not found"})
 		return
 	}
 	c.JSON(http.StatusOK, user)
 }
 
-func (h *UserHandler) UpdateUser(c *gin.Context) {
+func (h *PositionHandler) Update(c *gin.Context) {
 	id := c.Param("id")
 
-	var req core.UserUpdate
+	var req core.PositionUpdate
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -97,7 +96,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	updated, err := h.service.Update(c.Request.Context(), id, req)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "position not found"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -107,7 +106,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	c.JSON(http.StatusOK, updated)
 }
 
-func (h *UserHandler) DeleteUserById(c *gin.Context) {
+func (h *PositionHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

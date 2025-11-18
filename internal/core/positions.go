@@ -8,10 +8,17 @@ type Position struct {
 	Level        int       `json:"level" db:"level"`
 	DepartmentID string    `json:"department_id" db:"department_id"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 }
 
-type PositionPaginationResponse struct {
-	Data []Position `json:"data"`
-	Total int64 `json:"total"`
-	Error error `json:"error"`
+type PositionUpdate struct {
+	Title        *string    `json:"title"`
+	Level        *int       `json:"level"`
+	DepartmentID string    `json:"department_id"`
+}
+
+type PositionPagination struct {
+	Data  []Position `json:"data"`
+	Total int64      `json:"total"`
+	Error error      `json:"error"`
 }

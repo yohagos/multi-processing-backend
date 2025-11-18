@@ -11,7 +11,7 @@ type UserRepository interface {
 	Create(ctx context.Context, u core.User) (core.User, error)
 
 	Get(ctx context.Context, id string) (core.User, error)
-	Update(ctx context.Context, id string, updates core.UserUpdate) (core.User, error)
+	Update(ctx context.Context, id string, update core.UserUpdate) (core.User, error)
 	Delete(ctx context.Context, id string) error
 }
 
@@ -27,12 +27,10 @@ func (s *UserService) List(ctx context.Context, page, limit int) ([]core.User, i
 	return s.repo.List(ctx, page, limit)
 }
 
-func (s *UserService) Create(ctx context.Context, email, firstName, lastName string) (core.User, error) {
-	user := core.User{
-		Email:     email,
-		FirstName: firstName,
-		LastName:  lastName,
-	}
+func (s *UserService) Create(
+	ctx context.Context, 
+	user core.User,
+) (core.User, error) {
 	return s.repo.Create(ctx, user)
 }
 

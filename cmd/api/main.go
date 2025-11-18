@@ -38,6 +38,26 @@ func main() {
 	userService := services.NewUserService(userRepo)
 	userHandler := api.NewUserHandler(userService)
 
+	departmentRepo := db.NewDepartmentRepository(pool)
+	departmentService := services.NewDepartmentService(departmentRepo)
+	departmentHandler := api.NewDepartmentHandler(departmentService)
+
+	salaryRepo := db.NewSalaryRepository(pool)
+	salaryService := services.NewSalaryService(salaryRepo)
+	salaryHandler := api.NewSalaryHandler(salaryService)
+
+	addressRepo := db.NewAddressRepository(pool)
+	addressService := services.NewAddressService(addressRepo)
+	addressHandler := api.NewAddressHandler(addressService)
+
+	skillRepo := db.NewSkillRepository(pool)
+	skillService := services.NewSkillService(skillRepo)
+	skillHandler := api.NewSkillHandler(skillService)
+
+	positionRepo := db.NewPositionRepository(pool)
+	positionService := services.NewPositionService(positionRepo)
+	positionHandler := api.NewPositionHandler(positionService)
+
 	cryptoRepo := db.NewCryptoRepository(pool)
 	cryptoRepo.SeedCryptosIfEmpty(ctx, "migrations/json/crypto/generated_cryptos.json")
 	cryptoService := services.NewCryptoService(cryptoRepo)
@@ -58,6 +78,11 @@ func main() {
 	{
 		api.RegisterUserRoutes(v1.Group("/user"), userHandler)
 		api.RegisterCryptoRoutes(v1.Group("/crypto"), cryptoHandler)
+		api.RegisterDepartmentRoutes(v1.Group("/department"), departmentHandler)
+		api.RegisterSalaryRoutes(v1.Group("/salary"), salaryHandler)
+		api.RegisterSkillRoutes(v1.Group("/skill"), skillHandler)
+		api.RegisterPositionRoutes(v1.Group("/position"), positionHandler)
+		api.RegisterAddressRoutes(v1.Group("/address"), addressHandler)
 	}
 
 	srv := &http.Server{

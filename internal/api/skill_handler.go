@@ -2,55 +2,54 @@ package api
 
 import (
 	"context"
+	"multi-processing-backend/internal/core"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"multi-processing-backend/internal/core"
-
 	"github.com/gin-gonic/gin"
 )
 
-type UserService interface {
-	List(ctx context.Context, page, limit int) ([]core.User, int64, error)
-	Create(ctx context.Context, user core.User) (core.User, error)
+type SkillService interface {
+	List(ctx context.Context, page, limit int) ([]core.Skill, int64, error)
+	Create(ctx context.Context, user core.Skill) (core.Skill, error)
 
-	Get(ctx context.Context, id string) (core.User, error)
-	Update(ctx context.Context, id string, updates core.UserUpdate) (core.User, error)
+	Get(ctx context.Context, id string) (core.Skill, error)
+	Update(ctx context.Context, id string, updates core.SkillUpdate) (core.Skill, error)
 	Delete(ctx context.Context, id string) error
 }
 
-type UserHandler struct {
-	service UserService
+type SkillHandler struct {
+	service SkillService
 }
 
-func NewUserHandler(service UserService) *UserHandler {
-	return &UserHandler{service: service}
+func NewSkillHandler(service SkillService) *SkillHandler {
+	return &SkillHandler{service: service}
 }
 
-func RegisterUserRoutes(rg *gin.RouterGroup, h *UserHandler) {
-	users := rg.Group("")
+func RegisterSkillRoutes(rg *gin.RouterGroup, h *SkillHandler) {
+	salary := rg.Group("")
 	{
-		users.GET("", h.ListUsers)
-		users.POST("", h.CreateUser)
-		users.GET("/:id", h.GetUserById)
-		users.PATCH("/:id", h.UpdateUser)
-		users.DELETE("/:id", h.DeleteUserById)
+		salary.GET("", h.List)
+		salary.POST("", h.Create)
+		salary.GET("/:id", h.Get)
+		salary.PATCH("/:id", h.Update)
+		salary.DELETE("/:id", h.Delete)
 	}
 }
 
-func (h *UserHandler) ListUsers(c *gin.Context) {
+func (h *SkillHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 
-	users, total, err := h.service.List(c.Request.Context(), page, limit)
+	sals, total, err := h.service.List(c.Request.Context(), page, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	response := core.UserPagination{
-		Data:  users,
+	response := core.SkillPagination{
+		Data:  sals,
 		Total: total,
 		Error: nil,
 	}
@@ -58,37 +57,37 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func (h *UserHandler) CreateUser(c *gin.Context) {
-	var req core.User
+func (h *SkillHandler) Create(c *gin.Context) {
+	var req core.Skill
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	user, err := h.service.Create(c.Request.Context(), req)
+	skill, err := h.service.Create(c.Request.Context(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, user)
+	c.JSON(http.StatusCreated, skill)
 }
 
-func (h *UserHandler) GetUserById(c *gin.Context) {
+func (h *SkillHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 	user, err := h.service.Get(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "skill not found"})
 		return
 	}
 	c.JSON(http.StatusOK, user)
 }
 
-func (h *UserHandler) UpdateUser(c *gin.Context) {
+func (h *SkillHandler) Update(c *gin.Context) {
 	id := c.Param("id")
 
-	var req core.UserUpdate
+	var req core.SkillUpdate
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -97,7 +96,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	updated, err := h.service.Update(c.Request.Context(), id, req)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "skill not found"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -107,7 +106,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	c.JSON(http.StatusOK, updated)
 }
 
-func (h *UserHandler) DeleteUserById(c *gin.Context) {
+func (h *SkillHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
