@@ -69,7 +69,7 @@ func (r *UserRepository) ListWithDetails(
 			u.id, u.email, u.first_name, u.last_name, u.department_id, u.position_id, u.hire_date, 
 			u.phone, u.date_of_birth, u.created_at, u.updated_at,
 			d.id, d.name, d.description, d.created_at, d.updated_at,
-			p.id, p.title, p.level, p.department_id
+			p.id, p.title, p.level, p.department_id, p.created_at, p.updated_at
 		FROM users u
 		LEFT JOIN departments d ON u.department_id = d.id
 		LEFT JOIN positions p ON u.position_id = p.id
@@ -79,18 +79,20 @@ func (r *UserRepository) ListWithDetails(
 	if err != nil {
 		return nil, 0, err
 	}
-
 	defer rows.Close()
 
 	var users []core.UserWithDetails
 	for rows.Next() {
 		var user core.UserWithDetails
+		user.Departments = &core.Departments{}
+		user.Position = &core.Position{}
+
 		err := rows.Scan(
 			&user.ID, &user.Email, &user.FirstName, &user.LastName,
-			&user.DepartmentID, &user.PositionID, &user.HireDate, 
+			&user.DepartmentID, &user.PositionID, &user.HireDate,
 			&user.Phone, &user.DateOfBirth, &user.CreatedAt, &user.UpdatedAt,
 
-			&user.Departments.ID, &user.Departments.Name, &user.Departments.Description, 
+			&user.Departments.ID, &user.Departments.Name, &user.Departments.Description,
 			&user.Departments.CreatedAt, &user.Departments.UpdatedAt,
 
 			&user.Position.ID, &user.Position.Title, &user.Position.Level, &user.Position.DepartmentID,
@@ -123,7 +125,7 @@ func (r *UserRepository) Create(
 }
 
 func (r *UserRepository) Get(
-	ctx context.Context, 
+	ctx context.Context,
 	id string,
 ) (core.User, error) {
 	var u core.User
