@@ -13,6 +13,7 @@ import (
 
 type UserService interface {
 	List(ctx context.Context, page, limit int) ([]core.User, int64, error)
+	ListWithDetails(ctx context.Context, page, limit int) ([]core.UserWithDetails, int64, error)
 	Create(ctx context.Context, user core.User) (core.User, error)
 
 	Get(ctx context.Context, id string) (core.User, error)
@@ -31,15 +32,16 @@ func NewUserHandler(service UserService) *UserHandler {
 func RegisterUserRoutes(rg *gin.RouterGroup, h *UserHandler) {
 	users := rg.Group("")
 	{
-		users.GET("", h.ListUsers)
-		users.POST("", h.CreateUser)
-		users.GET("/:id", h.GetUserById)
-		users.PATCH("/:id", h.UpdateUser)
-		users.DELETE("/:id", h.DeleteUserById)
+		users.GET("", h.List)
+		users.POST("", h.Create)
+		users.GET("/:id", h.Get)
+		users.PATCH("/:id", h.Update)
+		users.DELETE("/:id", h.Delete)
+		users.GET("/extended", h.ListWithDetails)
 	}
 }
 
-func (h *UserHandler) ListUsers(c *gin.Context) {
+func (h *UserHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 
@@ -58,7 +60,26 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-func (h *UserHandler) CreateUser(c *gin.Context) {
+func (h *UserHandler) ListWithDetails(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+
+	users, total, err := h.service.ListWithDetails(c.Request.Context(), page, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	response := core.UserWithDetailsPagination{
+		Data:  users,
+		Total: total,
+		Error: nil,
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+func (h *UserHandler) Create(c *gin.Context) {
 	var req core.User
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -75,7 +96,7 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 	c.JSON(http.StatusCreated, user)
 }
 
-func (h *UserHandler) GetUserById(c *gin.Context) {
+func (h *UserHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 	user, err := h.service.Get(c.Request.Context(), id)
 	if err != nil {
@@ -85,7 +106,7 @@ func (h *UserHandler) GetUserById(c *gin.Context) {
 	c.JSON(http.StatusOK, user)
 }
 
-func (h *UserHandler) UpdateUser(c *gin.Context) {
+func (h *UserHandler) Update(c *gin.Context) {
 	id := c.Param("id")
 
 	var req core.UserUpdate
@@ -107,7 +128,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	c.JSON(http.StatusOK, updated)
 }
 
-func (h *UserHandler) DeleteUserById(c *gin.Context) {
+func (h *UserHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.Delete(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
