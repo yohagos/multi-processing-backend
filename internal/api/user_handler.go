@@ -9,7 +9,6 @@ import (
 	"multi-processing-backend/internal/core"
 
 	"github.com/gin-gonic/gin"
-	
 )
 
 type UserService interface {
@@ -50,7 +49,7 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 		return
 	}
 
-	response := core.UserPaginationResponse{
+	response := core.UserPagination{
 		Data:  users,
 		Total: total,
 		Error: nil,

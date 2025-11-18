@@ -27,10 +27,22 @@ type UserUpdate struct {
 	DateOfBirth  time.Time `json:"date_of_birth,omitempty"`
 }
 
-type UserPaginationResponse struct {
+type UserPagination struct {
 	Data  []User `json:"data"`
 	Total int64  `json:"total"`
 	Error error  `json:"error"`
+}
+
+type UserWithDetails struct {
+	User
+	Departments *Departments `json:"department,omitempty"`
+	Position    *Position    `json:"position,omitempty"`
+}
+
+type UserWithDetailsPagination struct {
+	Data  []UserWithDetails `json:"data"`
+	Total int64             `json:"total"`
+	Error error             `json:"error"`
 }
 
 type UserSkill struct {

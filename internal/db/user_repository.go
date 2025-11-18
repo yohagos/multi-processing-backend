@@ -53,6 +53,57 @@ func (r *UserRepository) List(
 	return users, total, nil
 }
 
+func (r *UserRepository) ListWithDetails(
+	ctx context.Context,
+	page, limit int,
+) ([]core.UserWithDetails, int64, error) {
+	offset := (page - 1) * limit
+
+	var total int64
+	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM users").Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT 
+			u.id, u.email, u.first_name, u.last_name, u.department_id, u.position_id, u.hire_date, 
+			u.phone, u.date_of_birth, u.created_at, u.updated_at,
+			d.id, d.name, d.description, d.created_at, d.updated_at,
+			p.id, p.title, p.level, p.department_id
+		FROM users u
+		LEFT JOIN departments d ON u.department_id = d.id
+		LEFT JOIN positions p ON u.position_id = p.id
+		ORDER BY u.created_at DESC
+		LIMIT $1 OFFSET $2
+	`, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	defer rows.Close()
+
+	var users []core.UserWithDetails
+	for rows.Next() {
+		var user core.UserWithDetails
+		err := rows.Scan(
+			&user.ID, &user.Email, &user.FirstName, &user.LastName,
+			&user.DepartmentID, &user.PositionID, &user.HireDate, 
+			&user.Phone, &user.DateOfBirth, &user.CreatedAt, &user.UpdatedAt,
+
+			&user.Departments.ID, &user.Departments.Name, &user.Departments.Description, 
+			&user.Departments.CreatedAt, &user.Departments.UpdatedAt,
+
+			&user.Position.ID, &user.Position.Title, &user.Position.Level, &user.Position.DepartmentID,
+			&user.Position.CreatedAt, &user.Position.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+		users = append(users, user)
+	}
+	return users, total, nil
+}
+
 func (r *UserRepository) Create(
 	ctx context.Context,
 	u core.User,
