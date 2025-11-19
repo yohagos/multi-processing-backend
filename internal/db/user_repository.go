@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,37 +26,6 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 func (r *UserRepository) List(
 	ctx context.Context,
 	page, limit int,
-) ([]core.User, int64, error) {
-	offset := (page - 1) * limit
-
-	var total int64
-	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM users").Scan(&total); err != nil {
-		return nil, 0, err
-	}
-
-	rows, err := r.pool.Query(ctx, `
-		SELECT id, email, first_name, last_name, department_id, position_id, hire_date, phone, date_of_birth, created_at, updated_at
-		FROM users
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
-	`, limit, offset)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	defer rows.Close()
-
-	users, err := pgx.CollectRows(rows, pgx.RowToStructByPos[core.User])
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return users, total, nil
-}
-
-func (r *UserRepository) ListWithDetails(
-	ctx context.Context,
-	page, limit int,
 ) ([]core.UserWithDetails, int64, error) {
 	offset := (page - 1) * limit
 
@@ -69,10 +39,32 @@ func (r *UserRepository) ListWithDetails(
 			u.id, u.email, u.first_name, u.last_name, u.department_id, u.position_id, u.hire_date, 
 			u.phone, u.date_of_birth, u.created_at, u.updated_at,
 			d.id, d.name, d.description, d.created_at, d.updated_at,
-			p.id, p.title, p.level, p.department_id, p.created_at, p.updated_at
+			p.id, p.title, p.level, p.department_id, p.created_at, p.updated_at,
+			a.id, a.user_id, a.street, a.city, a.zip_code, a.country, a.is_primary, a.created_at, a.updated_at,
+			COALESCE(
+				JSON_AGG(
+					JSON_BUILD_OBJECT(
+						'id', s.id,
+						'name', s.name,
+						'category', s.category,
+						'proficiency_level', us.proficiency_level,
+						'acquired_date', TO_CHAR(us.acquired_date, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+					)
+				) FILTER (WHERE s.id IS NOT NULL),
+				'[]'
+			) as skills
 		FROM users u
 		LEFT JOIN departments d ON u.department_id = d.id
 		LEFT JOIN positions p ON u.position_id = p.id
+		LEFT JOIN addresses a ON u.id = a.user_id AND a.is_primary = true
+		LEFT JOIN user_skills us ON u.id = us.user_id
+		LEFT JOIN skills s ON us.skill_id = s.id
+		GROUP BY 
+			u.id, u.email, u.first_name, u.last_name, u.department_id, u.position_id, u.hire_date, 
+			u.phone, u.date_of_birth, u.created_at, u.updated_at,
+			d.id, d.name, d.description, d.created_at, d.updated_at,
+			p.id, p.title, p.level, p.department_id, p.created_at, p.updated_at,
+			a.id, a.user_id, a.street, a.city, a.zip_code, a.country, a.is_primary, a.created_at, a.updated_at
 		ORDER BY u.created_at DESC
 		LIMIT $1 OFFSET $2
 	`, limit, offset)
@@ -84,8 +76,15 @@ func (r *UserRepository) ListWithDetails(
 	var users []core.UserWithDetails
 	for rows.Next() {
 		var user core.UserWithDetails
+		var skillsJSON []byte
+
+		var addID, addUserID, addStreet, addCity, addZipCode, addCountry sql.NullString
+		var addIsPrimary sql.NullBool
+		var addCreatedAt, addUpdatedAt sql.NullTime
+
 		user.Departments = &core.Departments{}
 		user.Position = &core.Position{}
+		user.Address = &core.Address{}
 
 		err := rows.Scan(
 			&user.ID, &user.Email, &user.FirstName, &user.LastName,
@@ -97,10 +96,36 @@ func (r *UserRepository) ListWithDetails(
 
 			&user.Position.ID, &user.Position.Title, &user.Position.Level, &user.Position.DepartmentID,
 			&user.Position.CreatedAt, &user.Position.UpdatedAt,
+
+			&addID, &addUserID, &addStreet, &addCity, &addZipCode,
+			&addCountry, &addIsPrimary, &addCreatedAt, &addUpdatedAt,
+
+			&skillsJSON,
 		)
 		if err != nil {
+			slog.Warn("ListWithDetails | Error occurred within Scan()", "error", err.Error())
 			return nil, 0, err
 		}
+
+		if addID.Valid {
+			user.Address.ID = addID.String
+			user.Address.UserID = addUserID.String
+			user.Address.Street = addStreet.String
+			user.Address.City = addCity.String
+			user.Address.ZipCode = addZipCode.String
+			user.Address.Country = addCountry.String
+			user.Address.IsPrimary = addIsPrimary.Bool
+			user.Address.CreatedAt = addCreatedAt.Time
+			user.Address.UpdatedAt = addUpdatedAt.Time
+		} else {
+			user.Address = nil
+		}
+
+		if err := json.Unmarshal(skillsJSON, &user.Skill); err != nil {
+			slog.Warn("ListWithDetails | Error occurred while json Unmarshal", "error", err.Error())
+			return nil, 0, err
+		}
+
 		users = append(users, user)
 	}
 	return users, total, nil

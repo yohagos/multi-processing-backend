@@ -1,6 +1,9 @@
 package core
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type User struct {
 	ID           string    `json:"id" db:"id"`
@@ -37,6 +40,8 @@ type UserWithDetails struct {
 	User
 	Departments *Departments `json:"department,omitempty"`
 	Position    *Position    `json:"position,omitempty"`
+	Address     *Address     `json:"address,omitempty"`
+	Skill      []UserSkill       `json:"skill,omitempty"`
 }
 
 type UserWithDetailsPagination struct {
@@ -51,4 +56,27 @@ type UserSkill struct {
 	SkillID          string    `json:"skill_id" db:"skill_id"`
 	ProficiencyLevel int       `json:"proficiency_level" db:"proficiency_level"`
 	AcquiredDate     time.Time `json:"acquired_date" db:"acquired_date"`
+}
+
+func (us *UserSkill) UnmarshelJSON(data []byte) error {
+	type Alias UserSkill
+
+	aux := &struct {
+		AcquiredDate string `json:"acquireddate"`
+		*Alias
+	}{
+		Alias: (*Alias)(us),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	if aux.AcquiredDate != "" {
+		parsedDate, err := time.Parse("2006-01-01", aux.AcquiredDate)
+		if err != nil {
+			return  err
+		}
+		us.AcquiredDate = parsedDate
+	}
+	return nil
 }
