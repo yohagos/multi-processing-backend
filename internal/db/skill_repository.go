@@ -2,16 +2,15 @@ package db
 
 import (
 	"context"
-	
+
 	"errors"
 	"fmt"
-	
 
 	"multi-processing-backend/internal/core"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	
+	"golang.org/x/exp/slog"
 )
 
 type SkillRepository struct {
@@ -74,7 +73,7 @@ func (r *SkillRepository) Create(
 }
 
 func (r *SkillRepository) Get(
-	ctx context.Context, 
+	ctx context.Context,
 	id string,
 ) (core.Skill, error) {
 	var s core.Skill
@@ -89,6 +88,40 @@ func (r *SkillRepository) Get(
 		return core.Skill{}, err
 	}
 	return s, nil
+}
+
+func (r *SkillRepository) GetByUserId(
+	ctx context.Context,
+	id string,
+) ([]core.SkillWithDetails, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT s.*, us.proficiency_level, us.acquired_date 
+		FROM user_skills us
+		JOIN skills s ON us.skill_id = s.id
+		WHERE us.user_id = $1
+	`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var skills []core.SkillWithDetails
+	for rows.Next() {
+		var skill core.SkillWithDetails
+		err := rows.Scan(
+			&skill.ID, &skill.Name, &skill.Category,
+			&skill.CreatedAt, &skill.UpdatedAt,
+			&skill.ProficiencyLevel, &skill.AcquiredDate,
+		)
+		if err != nil {
+			return nil, err
+		}
+		skills = append(skills, skill)
+	}
+
+	slog.Info("SkillRepository | Length of Skills found", "skills", skills)
+
+	return skills, nil
 }
 
 func (r *SkillRepository) Update(
