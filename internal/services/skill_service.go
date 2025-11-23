@@ -3,8 +3,6 @@ package services
 import (
 	"context"
 	"multi-processing-backend/internal/core"
-
-	"golang.org/x/exp/slog"
 )
 
 type SkillRepository interface {
@@ -41,7 +39,6 @@ func (s *SkillService) Get(ctx context.Context, id string) (core.Skill, error) {
 }
 
 func (s *SkillService) GetByUserId(ctx context.Context, id string) ([]core.SkillWithDetails, error) {
-	slog.Info("SkillService | Get Skills by UserID", "ID", id)
 	return s.repo.GetByUserId(ctx, id)
 }
 

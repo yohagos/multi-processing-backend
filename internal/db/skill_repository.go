@@ -10,7 +10,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/exp/slog"
 )
 
 type SkillRepository struct {
@@ -118,8 +117,6 @@ func (r *SkillRepository) GetByUserId(
 		}
 		skills = append(skills, skill)
 	}
-
-	slog.Info("SkillRepository | Length of Skills found", "skills", skills)
 
 	return skills, nil
 }

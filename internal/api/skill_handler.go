@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/exp/slog"
 )
 
 type SkillService interface {
@@ -89,7 +88,6 @@ func (h *SkillHandler) Get(c *gin.Context) {
 
 func (h *SkillHandler) GetByUserId(c *gin.Context) {
 	id := c.Param("id")
-	slog.Info("SkillHandler | Get Skills by UserID", "ID", id)
 	skills, err := h.service.GetByUserId(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "skills for user not found"})
