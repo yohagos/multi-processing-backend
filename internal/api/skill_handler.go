@@ -4,14 +4,13 @@ import (
 	"context"
 	"multi-processing-backend/internal/core"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
 type SkillService interface {
-	List(ctx context.Context, page, limit int) ([]core.Skill, int64, error)
+	List(ctx context.Context) ([]core.Skill, int64, error)
 	Create(ctx context.Context, user core.Skill) (core.Skill, error)
 
 	Get(ctx context.Context, id string) (core.Skill, error)
@@ -41,10 +40,7 @@ func RegisterSkillRoutes(rg *gin.RouterGroup, h *SkillHandler) {
 }
 
 func (h *SkillHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-
-	sals, total, err := h.service.List(c.Request.Context(), page, limit)
+	sals, total, err := h.service.List(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

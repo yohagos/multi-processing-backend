@@ -6,7 +6,7 @@ import (
 )
 
 type SkillRepository interface {
-	List(ctx context.Context, page, limit int) ([]core.Skill, int64, error)
+	List(ctx context.Context) ([]core.Skill, int64, error)
 	Create(ctx context.Context, u core.Skill) (core.Skill, error)
 
 	Get(ctx context.Context, id string) (core.Skill, error)
@@ -23,8 +23,8 @@ func NewSkillService(repo SkillRepository) *SkillService {
 	return &SkillService{repo: repo}
 }
 
-func (s *SkillService) List(ctx context.Context, page, limit int) ([]core.Skill, int64, error) {
-	return s.repo.List(ctx, page, limit)
+func (s *SkillService) List(ctx context.Context) ([]core.Skill, int64, error) {
+	return s.repo.List(ctx)
 }
 
 func (s *SkillService) Create(

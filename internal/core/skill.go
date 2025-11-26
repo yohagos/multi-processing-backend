@@ -28,7 +28,7 @@ type SkillUpdate struct {
 }
 
 type SkillPagination struct {
-	Data  []Skill
-	Total int64
-	Error error
+	Data  []Skill `json:"data"`
+	Total int64   `json:"total"`
+	Error error   `json:"error"`
 }

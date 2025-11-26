@@ -22,10 +22,7 @@ func NewSkillRepository(pool *pgxpool.Pool) *SkillRepository {
 
 func (r *SkillRepository) List(
 	ctx context.Context,
-	page, limit int,
 ) ([]core.Skill, int64, error) {
-	offset := (page - 1) * limit
-
 	var total int64
 	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM skills").Scan(&total); err != nil {
 		return nil, 0, err
@@ -35,8 +32,7 @@ func (r *SkillRepository) List(
 		SELECT id, name, category, created_at, updated_at
 		FROM skills
 		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
-	`, limit, offset)
+	`)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -47,6 +43,8 @@ func (r *SkillRepository) List(
 	if err != nil {
 		return nil, 0, err
 	}
+
+	//slog.Info("SkillRepo | skills found", "database", skills)
 
 	return skills, total, nil
 }
