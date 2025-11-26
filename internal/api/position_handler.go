@@ -4,14 +4,13 @@ import (
 	"context"
 	"multi-processing-backend/internal/core"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
 type PositionService interface {
-	List(ctx context.Context, page, limit int) ([]core.Position, int64, error)
+	List(ctx context.Context) ([]core.Position, int64, error)
 	Create(ctx context.Context, user core.Position) (core.Position, error)
 
 	Get(ctx context.Context, id string) (core.Position, error)
@@ -39,10 +38,7 @@ func RegisterPositionRoutes(rg *gin.RouterGroup, h *PositionHandler) {
 }
 
 func (h *PositionHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-
-	pos, total, err := h.service.List(c.Request.Context(), page, limit)
+	pos, total, err := h.service.List(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
