@@ -41,7 +41,7 @@ type UserWithDetails struct {
 	Departments *Departments `json:"department,omitempty"`
 	Position    *Position    `json:"position,omitempty"`
 	Address     *Address     `json:"address,omitempty"`
-	Skill      []UserSkill       `json:"skill,omitempty"`
+	Skill      []Skill       `json:"skill,omitempty"`
 }
 
 type UserWithDetailsPagination struct {

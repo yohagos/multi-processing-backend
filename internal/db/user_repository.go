@@ -35,39 +35,70 @@ func (r *UserRepository) List(
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT 
-			u.id, u.email, u.first_name, u.last_name, u.department_id, u.position_id, u.hire_date, 
-			u.phone, u.date_of_birth, u.created_at, u.updated_at,
-			d.id, d.name, d.description, d.created_at, d.updated_at,
-			p.id, p.title, p.level, p.department_id, p.created_at, p.updated_at,
-			a.id, a.user_id, a.street, a.city, a.zip_code, a.country, a.is_primary, a.created_at, a.updated_at,
-			COALESCE(
-				JSON_AGG(
+		SELECT
+			u.id,
+			u.email,
+			u.first_name,
+			u.last_name,
+			u.department_id,
+			u.position_id,
+			u.hire_date,
+			u.phone,
+			u.date_of_birth,
+			u.created_at,
+			u.updated_at,
+
+			COALESCE(d.id::text, '00000000-0000-0000-0000-000000000000') AS dept_id,
+			COALESCE(d.name, '') AS dept_name,
+			COALESCE(d.description, '') AS dept_description,
+			COALESCE(d.created_at, NOW()) AS dept_created_at,
+			COALESCE(d.updated_at, NOW()) AS dept_updated_at,
+
+			COALESCE(p.id::text, '00000000-0000-0000-0000-000000000000') AS pos_id,
+			COALESCE(p.title, '') AS pos_title,
+			COALESCE(p.level::int, 0) AS pos_level,
+			COALESCE(p.department_id::text, '00000000-0000-0000-0000-000000000000') AS pos_dept_id,
+			COALESCE(p.created_at, NOW()) AS pos_created_at,
+			COALESCE(p.updated_at, NOW()) AS pos_updated_at,
+
+			COALESCE(a.id::text, '') AS a_id,
+			COALESCE(a.user_id::text, '') AS a_user_id,
+			COALESCE(a.street, '') AS a_street,
+			COALESCE(a.city, '') AS a_city,
+			COALESCE(a.zip_code, '') AS a_zip_code,
+			COALESCE(a.country, '') AS a_country,
+			COALESCE(a.is_primary, false) AS a_is_primary,
+			COALESCE(a.created_at, NOW()) AS a_created_at,
+			COALESCE(a.updated_at, NOW()) AS a_updated_at,
+
+			COALESCE((
+				SELECT JSON_AGG(
 					JSON_BUILD_OBJECT(
-						'id', s.id,
+						'id', s.id::text,
 						'name', s.name,
 						'category', s.category,
-						'proficiency_level', us.proficiency_level,
-						'acquired_date', TO_CHAR(us.acquired_date, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+						'created_at', s.created_at,
+						'updated_at', s.updated_at
 					)
-				) FILTER (WHERE s.id IS NOT NULL),
-				'[]'
-			) as skills
+				)
+				FROM user_skills us
+				JOIN skills s ON us.skill_id = s.id
+				WHERE us.user_id = u.id
+			), '[]'::json) AS skills
+
 		FROM users u
 		LEFT JOIN departments d ON u.department_id = d.id
 		LEFT JOIN positions p ON u.position_id = p.id
-		LEFT JOIN addresses a ON u.id = a.user_id AND a.is_primary = true
-		LEFT JOIN user_skills us ON u.id = us.user_id
-		LEFT JOIN skills s ON us.skill_id = s.id
-		GROUP BY 
-			u.id, u.email, u.first_name, u.last_name, u.department_id, u.position_id, u.hire_date, 
-			u.phone, u.date_of_birth, u.created_at, u.updated_at,
-			d.id, d.name, d.description, d.created_at, d.updated_at,
-			p.id, p.title, p.level, p.department_id, p.created_at, p.updated_at,
-			a.id, a.user_id, a.street, a.city, a.zip_code, a.country, a.is_primary, a.created_at, a.updated_at
+		LEFT JOIN LATERAL (
+			SELECT *
+			FROM addresses a
+			WHERE a.user_id = u.id AND a.is_primary = true
+			LIMIT 1
+		) a ON true
+
 		ORDER BY u.created_at DESC
-		LIMIT $1 OFFSET $2
-	`, limit, offset)
+		LIMIT $1 OFFSET $2;
+    `, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -121,9 +152,13 @@ func (r *UserRepository) List(
 			user.Address = nil
 		}
 
-		if err := json.Unmarshal(skillsJSON, &user.Skill); err != nil {
-			slog.Warn("ListWithDetails | Error occurred while json Unmarshal", "error", err.Error())
-			return nil, 0, err
+		if len(skillsJSON) > 0 {
+			if err := json.Unmarshal(skillsJSON, &user.Skill); err != nil {
+				slog.Warn("ListWithDetails | Error occurred while json Unmarshal", "error", err.Error())
+				return nil, 0, err
+			}
+		} else {
+			user.Skill = []core.Skill{}
 		}
 
 		users = append(users, user)
