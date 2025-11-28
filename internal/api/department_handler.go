@@ -4,14 +4,13 @@ import (
 	"context"
 	"multi-processing-backend/internal/core"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
 type DepartmentService interface {
-	List(ctx context.Context, page, limit int) ([]core.Departments, int64, error)
+	List(ctx context.Context) ([]core.Departments, int64, error)
 	Create(ctx context.Context, user core.Departments) (core.Departments, error)
 
 	Get(ctx context.Context, id string) (core.Departments, error)
@@ -39,10 +38,7 @@ func RegisterDepartmentRoutes(rg *gin.RouterGroup, h *DepartmentHandler) {
 }
 
 func (h *DepartmentHandler) List(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultPostForm("limit", "10"))
-
-	deps, total, err := h.service.List(c.Request.Context(), page, limit)
+	deps, total, err := h.service.List(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

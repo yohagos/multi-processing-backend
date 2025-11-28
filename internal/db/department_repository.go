@@ -20,9 +20,7 @@ func NewDepartmentRepository(pool *pgxpool.Pool) *DepartmentRepository {
 
 func (r *DepartmentRepository) List(
 	ctx context.Context,
-	page, limit int,
 ) ([]core.Departments, int64, error) {
-	offset := (page - 1) * limit
 
 	var total int64
 	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM departments").Scan(&total); err != nil {
@@ -33,8 +31,7 @@ func (r *DepartmentRepository) List(
 		SELECT id, name, description, created_at, updated_at
 		FROM departments
 		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
-	`, limit, offset)
+	`)
 	if err != nil {
 		return nil, 0, err
 	}
