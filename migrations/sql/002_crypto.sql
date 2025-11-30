@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS crypto (
     name TEXT NOT NULL,
     current_value DECIMAL(19, 8) NOT NULL,
     previous_value DECIMAL(19, 8),
-    percent DECIMAL(10, 4) NOT NULL,
+    percent DECIMAL(10, 3) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     is_initial BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE(name, created_at)
