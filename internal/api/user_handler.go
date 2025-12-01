@@ -9,6 +9,7 @@ import (
 	"multi-processing-backend/internal/core"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/exp/slog"
 )
 
 type UserService interface {
@@ -87,13 +88,13 @@ func (h *UserHandler) Get(c *gin.Context) {
 
 func (h *UserHandler) Update(c *gin.Context) {
 	id := c.Param("id")
-
+	slog.Info("UserHandler | Update methog", "id", id)
 	var req core.UserUpdate
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
+	slog.Info("UserHandler | Update methog", "data", req)
 	updated, err := h.service.Update(c.Request.Context(), id, req)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
