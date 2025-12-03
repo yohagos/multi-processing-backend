@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/exp/slog"
 )
 
 type DepartmentService interface {
@@ -84,13 +83,11 @@ func (h *DepartmentHandler) Get(c *gin.Context) {
 
 func (h *DepartmentHandler) Update(c *gin.Context) {
 	id := c.Param("id")
-	slog.Info("DepartmentHandler | Update method", "id", id)
 	var req core.DepartmentUpdate
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	slog.Info("DepartmentHandler | Update method", "data", req)
 
 	updated, err := h.service.Update(c.Request.Context(), id, req)
 	if err != nil {

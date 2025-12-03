@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/exp/slog"
 )
 
 type PositionService interface {
@@ -83,13 +82,13 @@ func (h *PositionHandler) Get(c *gin.Context) {
 
 func (h *PositionHandler) Update(c *gin.Context) {
 	id := c.Param("id")
-	slog.Info("PositionHandler | Update method", "id", id)
+
 	var req core.PositionUpdate
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	slog.Info("PositionHandler | Update method", "data", req)
+
 	updated, err := h.service.Update(c.Request.Context(), id, req)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
