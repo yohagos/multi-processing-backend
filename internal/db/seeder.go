@@ -156,12 +156,10 @@ func (s *Seeder) seedPositions(ctx context.Context, jsonPath string) error {
 }
 
 func getRandomDepartment() core.Departments {
-
 	return insertedDepartments[rand.Intn(len(insertedDepartments))]
 }
 
 func getRandomPosition() core.Position {
-
 	return insertedPositions[rand.Intn(len(insertedPositions))]
 }
 
@@ -170,7 +168,6 @@ func getRandomUser() core.User {
 }
 
 func (s *Seeder) seedUsers(ctx context.Context, jsonPath string) error {
-
 	data, err := os.ReadFile(jsonPath)
 	if err != nil {
 		return err
@@ -193,6 +190,7 @@ func (s *Seeder) seedUsers(ctx context.Context, jsonPath string) error {
 		err = tx.QueryRow(ctx, `
 			INSERT INTO users (email, first_name, last_name, department_id, position_id, hire_date, phone, date_of_birth)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			ON CONFLICT (email) DO NOTHING
 			RETURNING id, email, first_name, last_name, department_id, position_id, hire_date, phone, date_of_birth
 		`, u.Email, u.FirstName, u.LastName, posi.DepartmentID,
 			posi.ID, u.HireDate, u.Phone, u.DateOfBirth).Scan(
