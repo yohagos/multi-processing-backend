@@ -12,11 +12,10 @@ import (
 )
 
 type UserService interface {
-	List(ctx context.Context, page, limit int) ([]core.User, int64, error)
-	ListWithDetails(ctx context.Context, page, limit int) ([]core.UserWithDetails, int64, error)
+	List(ctx context.Context, page, limit int, searchName, departmentName string) ([]core.UserWithDetails, int64, error)
 	Create(ctx context.Context, user core.User) (core.User, error)
 
-	Get(ctx context.Context, id string) (core.User, error)
+	Get(ctx context.Context, id string) (core.UserWithDetails, error)
 	Update(ctx context.Context, id string, updates core.UserUpdate) (core.User, error)
 	Delete(ctx context.Context, id string) error
 }
@@ -37,34 +36,16 @@ func RegisterUserRoutes(rg *gin.RouterGroup, h *UserHandler) {
 		users.GET("/:id", h.Get)
 		users.PATCH("/:id", h.Update)
 		users.DELETE("/:id", h.Delete)
-		users.GET("/extended", h.ListWithDetails)
 	}
 }
 
 func (h *UserHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	searchName := c.Param("searchName")
+	departmentName := c.Query("departmentName")
 
-	users, total, err := h.service.List(c.Request.Context(), page, limit)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	response := core.UserPagination{
-		Data:  users,
-		Total: total,
-		Error: nil,
-	}
-
-	c.JSON(http.StatusOK, response)
-}
-
-func (h *UserHandler) ListWithDetails(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-
-	users, total, err := h.service.ListWithDetails(c.Request.Context(), page, limit)
+	users, total, err := h.service.List(c.Request.Context(), page, limit, searchName, departmentName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

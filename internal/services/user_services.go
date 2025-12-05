@@ -7,11 +7,10 @@ import (
 )
 
 type UserRepository interface {
-	List(ctx context.Context, page, limit int) ([]core.User, int64, error)
-	ListWithDetails(ctx context.Context, page, limit int) ([]core.UserWithDetails, int64, error)
+	List(ctx context.Context, page, limit int, searchName, departmentName string) ([]core.UserWithDetails, int64, error)
 	Create(ctx context.Context, u core.User) (core.User, error)
 
-	Get(ctx context.Context, id string) (core.User, error)
+	Get(ctx context.Context, id string) (core.UserWithDetails, error)
 	Update(ctx context.Context, id string, update core.UserUpdate) (core.User, error)
 	Delete(ctx context.Context, id string) error
 }
@@ -24,22 +23,22 @@ func NewUserService(repo UserRepository) *UserService {
 	return &UserService{repo: repo}
 }
 
-func (s *UserService) List(ctx context.Context, page, limit int) ([]core.User, int64, error) {
-	return s.repo.List(ctx, page, limit)
-}
-
-func (s *UserService) ListWithDetails(ctx context.Context, page, limit int) ([]core.UserWithDetails, int64, error) {
-	return s.repo.ListWithDetails(ctx, page, limit)
+func (s *UserService) List(
+	ctx context.Context, 
+	page, limit int,
+	searchName, departmentName string, 
+) ([]core.UserWithDetails, int64, error) {
+	return s.repo.List(ctx, page, limit, searchName, departmentName)
 }
 
 func (s *UserService) Create(
-	ctx context.Context, 
+	ctx context.Context,
 	user core.User,
 ) (core.User, error) {
 	return s.repo.Create(ctx, user)
 }
 
-func (s *UserService) Get(ctx context.Context, id string) (core.User, error) {
+func (s *UserService) Get(ctx context.Context, id string) (core.UserWithDetails, error) {
 	return s.repo.Get(ctx, id)
 }
 

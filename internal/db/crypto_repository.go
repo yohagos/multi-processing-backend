@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"math"
+	"math/rand"
 	"multi-processing-backend/internal/core"
 	"os"
 	"time"
@@ -61,6 +63,9 @@ func (r *CryptoRepository) Create(
 		lastEntry.CurrentValue = 0
 	} else {
 		percent = ((c.CurrentValue - lastEntry.CurrentValue) / lastEntry.CurrentValue) * 100
+		if math.IsNaN(percent) {
+			percent = rand.Float64()
+		}
 	}
 	query := `
 		INSERT INTO crypto (initial, name, current_value, previous_value, percent)

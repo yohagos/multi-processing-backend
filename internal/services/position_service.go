@@ -6,7 +6,7 @@ import (
 )
 
 type PositionRepository interface {
-	List(ctx context.Context, page, limit int) ([]core.Position, int64, error)
+	List(ctx context.Context) ([]core.Position, int64, error)
 	Create(ctx context.Context, u core.Position) (core.Position, error)
 
 	Get(ctx context.Context, id string) (core.Position, error)
@@ -22,8 +22,8 @@ func NewPositionService(repo PositionRepository) *PositionService {
 	return &PositionService{repo: repo}
 }
 
-func (s *PositionService) List(ctx context.Context, page, limit int) ([]core.Position, int64, error) {
-	return s.repo.List(ctx, page, limit)
+func (s *PositionService) List(ctx context.Context) ([]core.Position, int64, error) {
+	return s.repo.List(ctx)
 }
 
 func (s *PositionService) Create(

@@ -70,7 +70,7 @@ func main() {
 
 	router.Use(
 		gin.Recovery(),
-		api.LoggingMiddleware(slog.Default()),
+		// api.LoggingMiddleware(slog.Default()),
 		api.CORSMiddleware(cfg.AllowedOrigins),
 	)
 

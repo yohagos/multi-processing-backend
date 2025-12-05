@@ -3,9 +3,6 @@ package db
 import (
 	"context"
 
-	"errors"
-	"fmt"
-
 	"multi-processing-backend/internal/core"
 
 	"github.com/jackc/pgx/v5"
@@ -93,28 +90,16 @@ func (r *AddressRepository) Update(
 	update core.AddressUpdate,
 ) (core.Address, error) {
 	var add core.Address
-
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, user_id, street, city, zip_code, country, is_primary, created_at, updated_at
-		FROM addresses 
-		WHERE id = $1
-	`, id).Scan(
+		UPDATE addresses
+		SET user_id = $1, street = $2, city = $3, zip_code = $4, country = $5, is_primary = true, updated_at = NOW()
+		WHERE id = $6
+		RETURNING id, user_id, street, city, zip_code, country, is_primary, created_at, updated_at
+	`,
+		update.UserID, update.Street, update.City, update.ZipCode, update.Country, id).Scan(
 		&add.ID, &add.UserID, &add.Street, &add.City, &add.ZipCode,
 		&add.Country, &add.IsPrimary, &add.CreatedAt, &add.UpdatedAt,
 	)
-
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return core.Address{}, fmt.Errorf("user not found")
-		}
-		return core.Address{}, err
-	}
-
-	_, err = r.pool.Exec(ctx, `
-		UPDATE addresses
-		SET user_id = $1, street = $2, city = $3, zip_code = $4, country = $5, is_primary = $6, updated_at = NOW()
-		WHERE id = $7
-	`, add.ID, add.UserID, add.Street, add.City, add.ZipCode, add.Country, add.IsPrimary, id)
 	if err != nil {
 		return core.Address{}, err
 	}

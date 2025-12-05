@@ -2,16 +2,16 @@ package db
 
 import (
 	"context"
-	
+	"time"
+
 	"errors"
 	"fmt"
-	
 
 	"multi-processing-backend/internal/core"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	
+	"golang.org/x/exp/slog"
 )
 
 type SkillRepository struct {
@@ -24,10 +24,7 @@ func NewSkillRepository(pool *pgxpool.Pool) *SkillRepository {
 
 func (r *SkillRepository) List(
 	ctx context.Context,
-	page, limit int,
 ) ([]core.Skill, int64, error) {
-	offset := (page - 1) * limit
-
 	var total int64
 	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM skills").Scan(&total); err != nil {
 		return nil, 0, err
@@ -37,8 +34,7 @@ func (r *SkillRepository) List(
 		SELECT id, name, category, created_at, updated_at
 		FROM skills
 		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2
-	`, limit, offset)
+	`)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -74,7 +70,7 @@ func (r *SkillRepository) Create(
 }
 
 func (r *SkillRepository) Get(
-	ctx context.Context, 
+	ctx context.Context,
 	id string,
 ) (core.Skill, error) {
 	var s core.Skill
@@ -89,6 +85,52 @@ func (r *SkillRepository) Get(
 		return core.Skill{}, err
 	}
 	return s, nil
+}
+
+func (r *SkillRepository) GetByUserId(
+	ctx context.Context,
+	id string,
+) ([]core.SkillWithDetails, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT s.*, us.proficiency_level, us.acquired_date 
+		FROM user_skills us
+		JOIN skills s ON us.skill_id = s.id
+		WHERE us.user_id = $1
+	`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var skills []core.SkillWithDetails
+	for rows.Next() {
+		var skill core.SkillWithDetails
+		err := rows.Scan(
+			&skill.ID, &skill.Name, &skill.Category,
+			&skill.CreatedAt, &skill.UpdatedAt,
+			&skill.ProficiencyLevel, &skill.AcquiredDate,
+		)
+		if err != nil {
+			return nil, err
+		}
+		skills = append(skills, skill)
+	}
+
+	return skills, nil
+}
+
+func (r *SkillRepository) AddSkillByUserId(
+	ctx context.Context,
+	skill_id string,
+	user_id string,
+) error {
+	query := `
+		INSERT INTO user_skills (user_id, skill_id, proficiency_level, acquired_date)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (user_id, skill_id) DO NOTHING
+	`
+	_, err := r.pool.Exec(ctx, query, user_id, skill_id, 1, time.Now())
+	return err
 }
 
 func (r *SkillRepository) Update(
@@ -127,5 +169,15 @@ func (r *SkillRepository) Update(
 
 func (r *SkillRepository) Delete(ctx context.Context, id string) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM skills WHERE id = $1`, id)
+	return err
+}
+
+func (r *SkillRepository) DeleteSkillByUserId(
+	ctx context.Context,
+	skill_id, user_id string,
+) error {
+	query := `DELETE FROM user_skills WHERE user_id = $1 and skill_id = $2`
+	_, err := r.pool.Exec(ctx, query, user_id, skill_id)
+	slog.Info("DeleteSkillByUserId", "Error", err)
 	return err
 }
