@@ -26,15 +26,39 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 func (r *UserRepository) List(
 	ctx context.Context,
 	page, limit int,
+	searchName, departmentName string,
 ) ([]core.UserWithDetails, int64, error) {
 	offset := (page - 1) * limit
 
+	whereClause := "WHERE 1=1"
+	params := []interface{}{}
+	paramCount := 0
+
+	if searchName != "" {
+		paramCount++
+		whereClause += fmt.Sprintf(" AND (u.first_name ILIKE $%d OR u.last_name ILIKE $%d)", paramCount, paramCount)
+		params = append(params, "%"+searchName+"%")
+	}
+
+	if departmentName != "" {
+		paramCount++
+		whereClause += fmt.Sprintf(" AND d.name ILIKE $%d", paramCount)
+		params = append(params, "%"+departmentName+"%")
+	}
+
+	countQuery := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM users u
+		LEFT JOIN departments d ON u.department_id = d.id
+		%s
+	`, whereClause)
+
 	var total int64
-	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM users").Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, countQuery, params...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
-	rows, err := r.pool.Query(ctx, `
+	query := fmt.Sprintf(`
 		SELECT
 			u.id,
 			u.email,
@@ -92,13 +116,19 @@ func (r *UserRepository) List(
 		LEFT JOIN LATERAL (
 			SELECT *
 			FROM addresses a
-			WHERE a.user_id = u.id AND a.is_primary = true
+			WHERE a.user_id = u.id
 			LIMIT 1
 		) a ON true
 
+		%s
+
 		ORDER BY u.created_at DESC
-		LIMIT $1 OFFSET $2;
-    `, limit, offset)
+		LIMIT $%d OFFSET $%d;
+    `, whereClause, paramCount+1, paramCount+2)
+
+	params = append(params, limit, offset)
+
+	rows, err := r.pool.Query(ctx, query, params...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -187,19 +217,123 @@ func (r *UserRepository) Create(
 func (r *UserRepository) Get(
 	ctx context.Context,
 	id string,
-) (core.User, error) {
-	var u core.User
+) (core.UserWithDetails, error) {
+	var user core.UserWithDetails
+	var skillsJSON []byte
+
+	var addID, addUserID, addStreet, addCity, addZipCode, addCountry sql.NullString
+	var addIsPrimary sql.NullBool
+	var addCreatedAt, addUpdatedAt sql.NullTime
+
+	user.Departments = &core.Departments{}
+	user.Position = &core.Position{}
+	user.Address = &core.Address{}
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, email, first_name, last_name, department_id, position_id, hire_date, phone, date_of_birth, created_at, updated_at
-		FROM users 
-		WHERE id = $1
+		SELECT
+			u.id,
+			u.email,
+			u.first_name,
+			u.last_name,
+			u.department_id,
+			u.position_id,
+			u.hire_date,
+			u.phone,
+			u.date_of_birth,
+			u.created_at,
+			u.updated_at,
+
+			COALESCE(d.id::text, '00000000-0000-0000-0000-000000000000') AS dept_id,
+			COALESCE(d.name, '') AS dept_name,
+			COALESCE(d.description, '') AS dept_description,
+			COALESCE(d.created_at, NOW()) AS dept_created_at,
+			COALESCE(d.updated_at, NOW()) AS dept_updated_at,
+
+			COALESCE(p.id::text, '00000000-0000-0000-0000-000000000000') AS pos_id,
+			COALESCE(p.title, '') AS pos_title,
+			COALESCE(p.level::int, 0) AS pos_level,
+			COALESCE(p.department_id::text, '00000000-0000-0000-0000-000000000000') AS pos_dept_id,
+			COALESCE(p.created_at, NOW()) AS pos_created_at,
+			COALESCE(p.updated_at, NOW()) AS pos_updated_at,
+
+			COALESCE(a.id::text, '') AS a_id,
+			COALESCE(a.user_id::text, '') AS a_user_id,
+			COALESCE(a.street, '') AS a_street,
+			COALESCE(a.city, '') AS a_city,
+			COALESCE(a.zip_code, '') AS a_zip_code,
+			COALESCE(a.country, '') AS a_country,
+			COALESCE(a.is_primary, false) AS a_is_primary,
+			COALESCE(a.created_at, NOW()) AS a_created_at,
+			COALESCE(a.updated_at, NOW()) AS a_updated_at,
+
+			COALESCE((
+				SELECT JSON_AGG(
+					JSON_BUILD_OBJECT(
+						'id', s.id::text,
+						'name', s.name,
+						'category', s.category,
+						'created_at', s.created_at,
+						'updated_at', s.updated_at
+					)
+				)
+				FROM user_skills us
+				JOIN skills s ON us.skill_id = s.id
+				WHERE us.user_id = u.id
+			), '[]'::json) AS skills
+
+		FROM users u
+		LEFT JOIN departments d ON u.department_id = d.id
+		LEFT JOIN positions p ON u.position_id = p.id
+		LEFT JOIN LATERAL (
+			SELECT *
+			FROM addresses a
+			WHERE a.user_id = u.id
+			LIMIT 1
+		) a ON true
+		WHERE u.id = $1
 	`, id).Scan(
-		&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.DepartmentID, &u.PositionID, &u.HireDate, &u.Phone, &u.DateOfBirth, &u.CreatedAt, &u.UpdatedAt,
+		&user.ID, &user.Email, &user.FirstName, &user.LastName,
+		&user.DepartmentID, &user.PositionID, &user.HireDate,
+		&user.Phone, &user.DateOfBirth, &user.CreatedAt, &user.UpdatedAt,
+
+		&user.Departments.ID, &user.Departments.Name, &user.Departments.Description,
+		&user.Departments.CreatedAt, &user.Departments.UpdatedAt,
+
+		&user.Position.ID, &user.Position.Title, &user.Position.Level, &user.Position.DepartmentID,
+		&user.Position.CreatedAt, &user.Position.UpdatedAt,
+
+		&addID, &addUserID, &addStreet, &addCity, &addZipCode,
+		&addCountry, &addIsPrimary, &addCreatedAt, &addUpdatedAt,
+
+		&skillsJSON,
 	)
 	if err != nil {
-		return core.User{}, err
+		return core.UserWithDetails{}, err
 	}
-	return u, nil
+
+	if addID.Valid {
+		user.Address.ID = addID.String
+		user.Address.UserID = addUserID.String
+		user.Address.Street = addStreet.String
+		user.Address.City = addCity.String
+		user.Address.ZipCode = addZipCode.String
+		user.Address.Country = addCountry.String
+		user.Address.IsPrimary = addIsPrimary.Bool
+		user.Address.CreatedAt = addCreatedAt.Time
+		user.Address.UpdatedAt = addUpdatedAt.Time
+	} else {
+		user.Address = nil
+	}
+
+	if len(skillsJSON) > 0 {
+		if err := json.Unmarshal(skillsJSON, &user.Skill); err != nil {
+			slog.Warn("ListWithDetails | Error occurred while json Unmarshal", "error", err.Error())
+			return core.UserWithDetails{}, err
+		}
+	} else {
+		user.Skill = []core.Skill{}
+	}
+
+	return user, nil
 }
 
 func (r *UserRepository) Update(
