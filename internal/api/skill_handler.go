@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/exp/slog"
 )
 
 type SkillService interface {
@@ -145,8 +144,6 @@ func (h *SkillHandler) Delete(c *gin.Context) {
 func (h *SkillHandler) DeleteSkillByUserId(c *gin.Context) {
 	skill_id := c.Param("skill_id")
 	user_id := c.Param("user_id")
-
-	slog.Info("Delete Skill by user id", "skill_id", skill_id, "user_id", user_id)
 
 	if err := h.service.DeleteSkillByUserId(c.Request.Context(), skill_id, user_id); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
