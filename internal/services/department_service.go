@@ -6,7 +6,7 @@ import (
 )
 
 type DepartmentRepository interface {
-	List(ctx context.Context) ([]core.Departments, int64, error)
+	List(ctx context.Context, searchName string) ([]core.Departments, int64, error)
 	Create(ctx context.Context, u core.Departments) (core.Departments, error)
 
 	Get(ctx context.Context, id string) (core.Departments, error)
@@ -22,8 +22,8 @@ func NewDepartmentService(repo DepartmentRepository) *DepartmentService {
 	return &DepartmentService{repo: repo}
 }
 
-func (s *DepartmentService) List(ctx context.Context) ([]core.Departments, int64, error) {
-	return s.repo.List(ctx)
+func (s *DepartmentService) List(ctx context.Context, searchName string) ([]core.Departments, int64, error) {
+	return s.repo.List(ctx, searchName)
 }
 
 func (s *DepartmentService) Create(

@@ -10,7 +10,7 @@ import (
 )
 
 type DepartmentService interface {
-	List(ctx context.Context) ([]core.Departments, int64, error)
+	List(ctx context.Context, searchName string) ([]core.Departments, int64, error)
 	Create(ctx context.Context, user core.Departments) (core.Departments, error)
 
 	Get(ctx context.Context, id string) (core.Departments, error)
@@ -38,7 +38,8 @@ func RegisterDepartmentRoutes(rg *gin.RouterGroup, h *DepartmentHandler) {
 }
 
 func (h *DepartmentHandler) List(c *gin.Context) {
-	deps, total, err := h.service.List(c.Request.Context())
+	searchName := c.Query("searchName")
+	deps, total, err := h.service.List(c.Request.Context(), searchName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

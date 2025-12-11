@@ -20,22 +20,38 @@ func NewDepartmentRepository(pool *pgxpool.Pool) *DepartmentRepository {
 
 func (r *DepartmentRepository) List(
 	ctx context.Context,
+	searchName string,
 ) ([]core.Departments, int64, error) {
+	var whereClause string
+	params := []any{}
+	paramCount := 0
+
+	if searchName != "" {
+		paramCount++
+		whereClause += "WHERE (d.name ILIKE $1 OR d.description ILIKE $1)"
+		params = append(params, "%"+searchName+"%")
+	}
+
+	countQuery := "SELECT COUNT(*) FROM departments d"
+	if whereClause != "" {
+		countQuery += " " + whereClause
+	}
 
 	var total int64
-	if err := r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM departments").Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, countQuery, params...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	
-	rows, err := r.pool.Query(ctx, `
-		SELECT id, name, description, created_at, updated_at
-		FROM departments
-		ORDER BY created_at DESC
-	`)
+
+	query := "SELECT d.id, d.name, d.description, d.created_at, d.updated_at FROM departments d"
+	if whereClause != "" {
+		query += " " + whereClause
+	}
+	query += " ORDER BY d.updated_at DESC"
+
+	rows, err := r.pool.Query(ctx, query, params...)
 	if err != nil {
 		return nil, 0, err
 	}
-
 	defer rows.Close()
 
 	deps, err := pgx.CollectRows(rows, pgx.RowToStructByPos[core.Departments])
