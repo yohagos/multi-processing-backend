@@ -14,7 +14,9 @@ type ForumUserRepository interface {
 	RegisterOrLogin(ctx context.Context, email, username string) (*core.ForumUser, error)
 	GetUserChannels(ctx context.Context, userID string) ([]core.ForumChannel, error)
 	GetChannelMessages(ctx context.Context, channelID, userID string) ([]core.ForumMessage, error)
-	SendMessage(ctx context.Context, channelID, userID, content string) (*core.ForumMessage, error)
+	//SendMessage(ctx context.Context, channelID, userID, content string) (*core.ForumMessage, error)
+	CreateMessage(ctx context.Context, message *core.ForumMessage) error
+	MarkMessagesAsRead(ctx context.Context, channelID, userID string) error
 }
 
 type ForumUserService struct {
@@ -53,6 +55,17 @@ func (s *ForumUserService) GetChannelMessages(ctx context.Context, channelID, us
 	return s.repo.GetChannelMessages(ctx, channelID, userID)
 }
 
-func (s *ForumUserService) SendMessage(ctx context.Context, channelID, userID, content string) (*core.ForumMessage, error) {
+/* func (s *ForumUserService) SendMessage(ctx context.Context, channelID, userID, content string) (*core.ForumMessage, error) {
 	return s.repo.SendMessage(ctx, channelID, userID, content)
+} */
+
+func (s *ForumUserService) CreateMessage(
+	ctx context.Context, 
+	message *core.ForumMessage,
+) error {
+	return  s.repo.CreateMessage(ctx, message)
+}
+
+func (s *ForumUserService) MarkMessagesAsRead(ctx context.Context, channelID, userID string) error {
+	return s.repo.MarkMessagesAsRead(ctx, channelID, userID)
 }
