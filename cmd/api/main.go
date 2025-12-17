@@ -62,6 +62,10 @@ func main() {
 	cryptoRepo.SeedCryptosIfEmpty(ctx, "migrations/json/crypto/generated_cryptos.json")
 	cryptoService := services.NewCryptoService(cryptoRepo)
 
+	forumRepo := db.NewForumUserRepository(pool)
+	forumService := services.NewForumUserService(forumRepo)
+	forumHandler := api.NewForumUserHandler(forumService)
+
 	go cryptoService.StartPriceTicker(ctx)
 
 	cryptoHandler := api.NewCryptoHandler(cryptoService)
@@ -83,6 +87,7 @@ func main() {
 		api.RegisterSkillRoutes(v1.Group("/skill"), skillHandler)
 		api.RegisterPositionRoutes(v1.Group("/position"), positionHandler)
 		api.RegisterAddressRoutes(v1.Group("/address"), addressHandler)
+		api.RegisterForumUserRoutes(v1.Group("/forum"), forumHandler)
 	}
 
 	srv := &http.Server{
