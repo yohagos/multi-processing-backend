@@ -15,7 +15,7 @@ type ForumUserRepository interface {
 	RegisterOrLogin(ctx context.Context, email, username string) (*core.ForumUser, error)
 	GetUserChannels(ctx context.Context, userID string) ([]core.ForumChannel, error)
 	GetChannelMessages(ctx context.Context, channelID, userID string) ([]core.ForumMessage, error)
-	CreateMessage(ctx context.Context, channelID, userID, content string) error
+	CreateMessage(ctx context.Context, channelID, userID, content string) (*core.ForumMessage, error)
 	MarkMessagesAsRead(ctx context.Context, channelID, userID string) error
 
 	GetOrCreateDirectMessageChannel(ctx context.Context, user1ID, user2ID string) (string, error)
@@ -70,7 +70,7 @@ func (s *ForumUserService) GetChannelMessages(ctx context.Context, channelID, us
 	return s.repo.GetChannelMessages(ctx, channelID, userID)
 }
 
-func (s *ForumUserService) CreateMessage(ctx context.Context, channelID, userID, content string) error {
+func (s *ForumUserService) CreateMessage(ctx context.Context, channelID, userID, content string) (*core.ForumMessage, error) {
 	return s.repo.CreateMessage(ctx, channelID, userID, content)
 }
 

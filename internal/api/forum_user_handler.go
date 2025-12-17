@@ -18,7 +18,7 @@ type ForumUserService interface {
 	RegisterOrLogin(ctx context.Context, email, username string) (*core.ForumUser, error)
 	GetUserChannels(ctx context.Context, userID string) ([]core.ForumChannel, error)
 	GetChannelMessages(ctx context.Context, channelID, userID string) ([]core.ForumMessage, error)
-	CreateMessage(ctx context.Context, channelID, userID, content string) error
+	CreateMessage(ctx context.Context, channelID, userID, content string) (*core.ForumMessage, error)
 	MarkMessagesAsRead(ctx context.Context, channelID, userID string) error
 
 	GetOrCreateDirectMessageChannel(ctx context.Context, user1ID, user2ID string) (string, error)
@@ -204,13 +204,13 @@ func (h *ForumUserHandler) CreateMessage(c *gin.Context) {
 		return
 	}
 
-	err := h.service.CreateMessage(c.Request.Context(), channelID, req.UserID, req.Content)
+	message, err := h.service.CreateMessage(c.Request.Context(), channelID, req.UserID, req.Content)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, nil)
+	c.JSON(http.StatusOK, message)
 }
 
 func (h *ForumUserHandler) MarkMessagesAsRead(c *gin.Context) {
