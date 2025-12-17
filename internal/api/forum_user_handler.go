@@ -60,7 +60,7 @@ func RegisterForumUserRoutes(rg *gin.RouterGroup, h *ForumUserHandler) {
 	{
 		channels.GET("/:id/members", h.GetChannelMembers)
 		channels.GET("/:id/messages", h.GetChannelMessages)
-		channels.GET("/:userID/unread", h.GetUnreadCount)
+		channels.GET("/:id/unread", h.GetUnreadCount)
 		channels.GET("/user/:userID", h.GetUserChannels)
 		channels.GET("/direct", h.GetOrCreateDirectMessageChannel)
 
@@ -196,7 +196,7 @@ func (h *ForumUserHandler) CreateMessage(c *gin.Context) {
 	channelID := c.Param("id")
 	var req struct {
 		UserID  string `json:"userId"`
-        Content string `json:"content"`
+		Content string `json:"content"`
 	}
 
 	if err := c.BindJSON(&req); err != nil {
@@ -216,12 +216,12 @@ func (h *ForumUserHandler) CreateMessage(c *gin.Context) {
 func (h *ForumUserHandler) MarkMessagesAsRead(c *gin.Context) {
 	channelID := c.Param("id")
 	var req struct {
-        UserID string `json:"userId"`
-    }
+		UserID string `json:"userId"`
+	}
 
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
-		return 
+		return
 	}
 
 	err := h.service.MarkMessagesAsRead(c.Request.Context(), channelID, req.UserID)
@@ -254,9 +254,9 @@ func (h *ForumUserHandler) GetOrCreateDirectMessageChannel(c *gin.Context) {
 func (h *ForumUserHandler) GetOnlineUsers(c *gin.Context) {
 	userID := c.Query("userID")
 	if userID == "" {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "userId query parameter required"})
-        return
-    }
+		c.JSON(http.StatusBadRequest, gin.H{"error": "userId query parameter required"})
+		return
+	}
 
 	users, err := h.service.GetOnlineUsers(c.Request.Context(), userID)
 	if err != nil {
@@ -268,12 +268,12 @@ func (h *ForumUserHandler) GetOnlineUsers(c *gin.Context) {
 }
 
 func (h *ForumUserHandler) SearchUsers(c *gin.Context) {
-	 query := c.Query("q")
-    userID := c.Query("userId")
-    if query == "" || userID == "" {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "q and userId query parameters required"})
-        return
-    }
+	query := c.Query("q")
+	userID := c.Query("userId")
+	if query == "" || userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "q and userId query parameters required"})
+		return
+	}
 
 	users, err := h.service.SearchUsers(c.Request.Context(), query, userID)
 	if err != nil {
@@ -285,7 +285,7 @@ func (h *ForumUserHandler) SearchUsers(c *gin.Context) {
 }
 
 func (h *ForumUserHandler) GetUnreadCount(c *gin.Context) {
-	userID := c.Param("userID")
+	userID := c.Param("id")
 
 	result, err := h.service.GetUnreadCount(c.Request.Context(), userID)
 	if err != nil {
@@ -298,13 +298,13 @@ func (h *ForumUserHandler) GetUnreadCount(c *gin.Context) {
 
 func (h *ForumUserHandler) UpdateUserPresence(c *gin.Context) {
 	userID := c.Param("id")
-    var req struct {
-        IsOnline bool `json:"isOnline"`
-    }
-    if err := c.BindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
-        return
-    }
+	var req struct {
+		IsOnline bool `json:"isOnline"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
 
 	err := h.service.UpdateUserPresence(c.Request.Context(), userID, req.IsOnline)
 	if err != nil {
@@ -331,7 +331,7 @@ func (h *ForumUserHandler) EditMessage(c *gin.Context) {
 	messageID := c.Param("id")
 	var req struct {
 		UserID  string `json:"userId"`
-        Content string `json:"content"`
+		Content string `json:"content"`
 	}
 
 	if err := c.BindJSON(&req); err != nil {
@@ -354,7 +354,7 @@ func (h *ForumUserHandler) DeleteMessage(c *gin.Context) {
 
 	if userID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "userID query parameter required"})
-		return 
+		return
 	}
 
 	err := h.service.DeleteMessage(c.Request.Context(), messageID, userID)
@@ -369,13 +369,13 @@ func (h *ForumUserHandler) DeleteMessage(c *gin.Context) {
 func (h *ForumUserHandler) AddReaction(c *gin.Context) {
 	messageID := c.Param("id")
 	var req struct {
-        UserID string `json:"userId"`
-        Emoji  string `json:"emoji"`
-    }
-    if err := c.BindJSON(&req); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
-        return
-    }
+		UserID string `json:"userId"`
+		Emoji  string `json:"emoji"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
 
 	err := h.service.AddReaction(c.Request.Context(), messageID, req.UserID, req.Emoji)
 	if err != nil {
@@ -388,12 +388,12 @@ func (h *ForumUserHandler) AddReaction(c *gin.Context) {
 
 func (h *ForumUserHandler) RemoveReaction(c *gin.Context) {
 	messageID := c.Param("id")
-	 userID := c.Query("userId")
-    emoji := c.Query("emoji")
-    if userID == "" || emoji == "" {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "userId and emoji query parameters required"})
-        return
-    }
+	userID := c.Query("userId")
+	emoji := c.Query("emoji")
+	if userID == "" || emoji == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "userId and emoji query parameters required"})
+		return
+	}
 
 	err := h.service.RemoveReaction(c.Request.Context(), messageID, userID, emoji)
 	if err != nil {
