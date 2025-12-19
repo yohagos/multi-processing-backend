@@ -114,6 +114,7 @@ func main() {
 	slog.Warn("Dropping Tables for Employments")
 	seeder.DeleteDevData(context.Background())
 	cryptoRepo.DeleteDevData(context.Background())
+	forumRepo.DeleteForumTables(context.Background())
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server forced to shutdown", "error", err)

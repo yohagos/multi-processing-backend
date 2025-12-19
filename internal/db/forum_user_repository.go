@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/exp/slog"
 )
 
 type ForumUserRepository struct {
@@ -18,19 +19,19 @@ func NewForumUserRepository(pool *pgxpool.Pool) *ForumUserRepository {
 	return &ForumUserRepository{pool: pool}
 }
 
-func (r * ForumUserRepository) GetByEmail(
-	ctx context.Context, 
+func (r *ForumUserRepository) GetByEmail(
+	ctx context.Context,
 	email string,
 ) (*core.ForumUser, error) {
 	var user core.ForumUser
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, email, username, display_name, avatarurl, is_online, last_seen, created_at, updated_at
+		SELECT id, email, username, display_name, avatar_url, is_online, last_seen, created_at, updated_at
 		FROM forum_users
 		WHERE email = $1
 	`, email).Scan(
-		&user.ID, &user.Email,  &user.Username,  &user.DisplayName, 
-		 &user.AvatarUrl,  &user.IsOnline,  &user.LastSeen,  
-		 &user.CreatedAt,  &user.UpdatedAt,
+		&user.ID, &user.Email, &user.Username, &user.DisplayName,
+		&user.AvatarUrl, &user.IsOnline, &user.LastSeen,
+		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -49,9 +50,9 @@ func (r *ForumUserRepository) GetByID(
 		FROM forum_users
 		WHERE id = $1
 	`, userID).Scan(
-		&user.ID, &user.Email,  &user.Username,  &user.DisplayName, 
-		 &user.AvatarUrl,  &user.IsOnline,  &user.LastSeen,  
-		 &user.CreatedAt,  &user.UpdatedAt,
+		&user.ID, &user.Email, &user.Username, &user.DisplayName,
+		&user.AvatarUrl, &user.IsOnline, &user.LastSeen,
+		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -59,21 +60,21 @@ func (r *ForumUserRepository) GetByID(
 	return &user, err
 }
 
-func (r * ForumUserRepository) Create(
-	ctx context.Context, 
+func (r *ForumUserRepository) Create(
+	ctx context.Context,
 	user *core.ForumUser,
 ) error {
 	return r.pool.QueryRow(ctx, `
-		INSERT INTO forum_users (email, username, display_name, avatar_url, is_online, last_seen, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO forum_users (email, username, display_name, is_online, last_seen, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id
-	`, user.Email, user.Username, user.DisplayName, user.AvatarUrl, 
+	`, user.Email, user.Username, user.DisplayName,
 		user.IsOnline, user.LastSeen, user.CreatedAt, user.UpdatedAt,
 	).Scan(&user.ID)
 }
 
-func (r * ForumUserRepository) Update(
-	ctx context.Context, 
+func (r *ForumUserRepository) Update(
+	ctx context.Context,
 	user *core.ForumUser,
 ) error {
 	_, err := r.pool.Exec(ctx, `
@@ -84,8 +85,8 @@ func (r * ForumUserRepository) Update(
 	return err
 }
 
-func (r * ForumUserRepository) IsChannelMember(
-	ctx context.Context, 
+func (r *ForumUserRepository) IsChannelMember(
+	ctx context.Context,
 	channelID, userID string,
 ) (bool, error) {
 	var exists bool
@@ -98,8 +99,8 @@ func (r * ForumUserRepository) IsChannelMember(
 	return exists, err
 }
 
-func (r * ForumUserRepository) RegisterOrLogin(
-	ctx context.Context, 
+func (r *ForumUserRepository) RegisterOrLogin(
+	ctx context.Context,
 	email, username string,
 ) (*core.ForumUser, error) {
 	user, err := r.GetByEmail(ctx, email)
@@ -107,30 +108,31 @@ func (r * ForumUserRepository) RegisterOrLogin(
 		user.IsOnline = true
 		user.LastSeen = time.Now()
 		if err := r.Update(ctx, user); err != nil {
-			return  nil, err
+			return nil, err
 		}
 		return user, nil
 	}
 
 	newUser := &core.ForumUser{
-		Email: email,
-		Username: username,
+		Email:       email,
+		Username:    username,
 		DisplayName: username,
-		IsOnline: true,
-		LastSeen: time.Now(),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		AvatarUrl:   "",
+		IsOnline:    true,
+		LastSeen:    time.Now(),
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
 	if err := r.Create(ctx, newUser); err != nil {
 		return nil, err
 	}
-	
+
 	return newUser, nil
 }
 
-func (r * ForumUserRepository) GetUserChannels(
-	ctx context.Context, 
+func (r *ForumUserRepository) GetUserChannels(
+	ctx context.Context,
 	userID string,
 ) ([]core.ForumChannel, error) {
 	rows, err := r.pool.Query(ctx, `
@@ -145,12 +147,11 @@ func (r * ForumUserRepository) GetUserChannels(
 	}
 	defer rows.Close()
 
-	return  pgx.CollectRows(rows, pgx.RowToStructByPos[core.ForumChannel])
+	return pgx.CollectRows(rows, pgx.RowToStructByPos[core.ForumChannel])
 }
 
-
-func (r * ForumUserRepository) GetChannelMessages(
-	ctx context.Context, 
+func (r *ForumUserRepository) GetChannelMessages(
+	ctx context.Context,
 	channelID, userID string,
 ) ([]core.ForumMessage, error) {
 	isMember, err := r.IsChannelMember(ctx, channelID, userID)
@@ -166,7 +167,7 @@ func (r * ForumUserRepository) GetChannelMessages(
         ORDER BY created_at ASC
 	`, channelID)
 	if err != nil {
-		return  nil, err
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -174,31 +175,31 @@ func (r * ForumUserRepository) GetChannelMessages(
 }
 
 func (r *ForumUserRepository) CreateMessage(
-	ctx context.Context, 
+	ctx context.Context,
 	channelID, userID, content string,
 ) (*core.ForumMessage, error) {
-    var message core.ForumMessage
-    
-    err := r.pool.QueryRow(ctx, `
+	var message core.ForumMessage
+
+	err := r.pool.QueryRow(ctx, `
         INSERT INTO forum_messages (id, channel_id, user_id, content, message_type, 
                                     is_edited, is_deleted, created_at, updated_at)
         VALUES (gen_random_uuid(), $1, $2, $3, 'text', false, false, NOW(), NOW())
         RETURNING id, channel_id, user_id, content, message_type, 
                   parent_message_id, is_edited, is_deleted, created_at, updated_at
     `, channelID, userID, content).Scan(
-        &message.ID, &message.ChannelID, &message.UserID, &message.Content, &message.MessageType,
-        &message.ParentMessageID, &message.IsEdited, &message.IsDeleted,
-        &message.CreatedAt, &message.UpdatedAt,
-    )
-    
-    if err != nil {
-        return nil, err
-    }
-    return &message, nil
+		&message.ID, &message.ChannelID, &message.UserID, &message.Content, &message.MessageType,
+		&message.ParentMessageID, &message.IsEdited, &message.IsDeleted,
+		&message.CreatedAt, &message.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+	return &message, nil
 }
 
 func (r *ForumUserRepository) CreatMessage(
-	ctx context.Context, 
+	ctx context.Context,
 	message *core.ForumMessage,
 ) error {
 	return r.pool.QueryRow(ctx, `
@@ -207,13 +208,13 @@ func (r *ForumUserRepository) CreatMessage(
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING id
 		`, message.ID, message.ChannelID, message.UserID, message.Content, message.MessageType,
-			message.ParentMessageID, message.IsEdited, message.IsDeleted, 
-			message.CreatedAt, message.UpdatedAt,
-		).Scan(&message.ID)
+		message.ParentMessageID, message.IsEdited, message.IsDeleted,
+		message.CreatedAt, message.UpdatedAt,
+	).Scan(&message.ID)
 }
 
 func (r *ForumUserRepository) MarkMessagesAsRead(ctx context.Context, channelID, userID string) error {
-    _, err := r.pool.Exec(ctx, `
+	_, err := r.pool.Exec(ctx, `
         INSERT INTO message_read_status (message_id, user_id, read_at)
         SELECT fm.id, $2, NOW()
         FROM forum_messages fm
@@ -224,7 +225,7 @@ func (r *ForumUserRepository) MarkMessagesAsRead(ctx context.Context, channelID,
               WHERE mrs.message_id = fm.id AND mrs.user_id = $2
           )
     `, channelID, userID)
-    return err
+	return err
 }
 
 func (r *ForumUserRepository) GetOrCreateDirectMessageChannel(
@@ -291,7 +292,7 @@ func (r *ForumUserRepository) SearchUsers(
 }
 
 func (r *ForumUserRepository) GetUnreadCount(
-	ctx context.Context, 
+	ctx context.Context,
 	userID string,
 ) (map[string]int, error) {
 	rows, err := r.pool.Query(ctx, `
@@ -356,49 +357,86 @@ func (r *ForumUserRepository) GetChannelMembers(
 }
 
 func (r *ForumUserRepository) EditMessage(
-	ctx context.Context, 
+	ctx context.Context,
 	messageID, userID, newContent string,
 ) error {
-    _, err := r.pool.Exec(ctx, `
+	_, err := r.pool.Exec(ctx, `
         UPDATE forum_messages 
         SET content = $1, is_edited = true, updated_at = NOW()
         WHERE id = $2 AND user_id = $3
     `, newContent, messageID, userID)
-    return err
+	return err
 }
 
 func (r *ForumUserRepository) DeleteMessage(
-	ctx context.Context, 
+	ctx context.Context,
 	messageID, userID string,
 ) error {
-    _, err := r.pool.Exec(ctx, `
+	_, err := r.pool.Exec(ctx, `
         UPDATE forum_messages 
         SET is_deleted = true, content = '[deleted]', updated_at = NOW()
         WHERE id = $1 AND user_id = $2
     `, messageID, userID)
-    return err
+	return err
 }
 
-
 func (r *ForumUserRepository) AddReaction(
-	ctx context.Context, 
+	ctx context.Context,
 	messageID, userID, emoji string,
 ) error {
-    _, err := r.pool.Exec(ctx, `
+	_, err := r.pool.Exec(ctx, `
         INSERT INTO message_reactions (message_id, user_id, emoji, created_at)
         VALUES ($1, $2, $3, NOW())
         ON CONFLICT (message_id, user_id, emoji) DO NOTHING
     `, messageID, userID, emoji)
-    return err
+	return err
 }
 
 func (r *ForumUserRepository) RemoveReaction(
-	ctx context.Context, 
+	ctx context.Context,
 	messageID, userID, emoji string,
 ) error {
-    _, err := r.pool.Exec(ctx, `
+	_, err := r.pool.Exec(ctx, `
         DELETE FROM message_reactions 
         WHERE message_id = $1 AND user_id = $2 AND emoji = $3
     `, messageID, userID, emoji)
-    return err
+	return err
+}
+
+// Clearing tables after shutdown
+func (r *ForumUserRepository) DeleteForumTables(ctx context.Context) {
+	_, err := r.pool.Exec(ctx, "DROP TABLE message_reactions CASCADE")
+	if err != nil {
+		slog.Warn("ForumUserRepository | DeleteForumTables | error occurred while deleting message_reactions")
+	}
+
+	_, err = r.pool.Exec(ctx, "DROP TABLE forum_messages CASCADE")
+	if err != nil {
+		slog.Warn("ForumUserRepository | DeleteForumTables | error occurred while deleting forum_messages")
+	}
+
+	_, err = r.pool.Exec(ctx, "DROP TABLE forum_users CASCADE")
+	if err != nil {
+		slog.Warn("ForumUserRepository | DeleteForumTables | error occurred while deleting forum_users")
+	}
+
+	_, err = r.pool.Exec(ctx, "DROP TABLE message_read_status CASCADE")
+	if err != nil {
+		slog.Warn("ForumUserRepository | DeleteForumTables | error occurred while deleting message_read_status")
+	}
+
+	_, err = r.pool.Exec(ctx, "DROP TABLE channel_members CASCADE")
+	if err != nil {
+		slog.Warn("ForumUserRepository | DeleteForumTables | error occurred while deleting channel_members")
+	}
+
+	_, err = r.pool.Exec(ctx, "DROP TABLE create_direct_message_channel CASCADE")
+	if err != nil {
+		slog.Warn("ForumUserRepository | DeleteForumTables | error occurred while deleting create_direct_message_channel")
+	}
+
+	_, err = r.pool.Exec(ctx, "DROP TABLE forum_channels CASCADE")
+	if err != nil {
+		slog.Warn("ForumUserRepository | DeleteForumTables | error occurred while deleting forum_channels")
+	}
 }
