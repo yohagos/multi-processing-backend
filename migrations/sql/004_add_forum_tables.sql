@@ -85,3 +85,5 @@ BEGIN
     RETURN channel_id;
 END;
 $$ LANGUAGE plpgsql;
+
+ALTER TABLE forum_users ALTER COLUMN avatar_url SET DEFAULT '';
