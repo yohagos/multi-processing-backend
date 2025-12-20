@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"multi-processing-backend/internal/core"
 	"time"
@@ -24,17 +25,22 @@ func (r *ForumUserRepository) GetByEmail(
 	email string,
 ) (*core.ForumUser, error) {
 	var user core.ForumUser
+	var avatarUrl sql.NullString
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, email, username, display_name, avatar_url, is_online, last_seen, created_at, updated_at
 		FROM forum_users
 		WHERE email = $1
 	`, email).Scan(
 		&user.ID, &user.Email, &user.Username, &user.DisplayName,
-		&user.AvatarUrl, &user.IsOnline, &user.LastSeen,
+		&avatarUrl, &user.IsOnline, &user.LastSeen,
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if avatarUrl.Valid {
+		user.AvatarUrl = avatarUrl
 	}
 
 	return &user, nil
@@ -101,7 +107,7 @@ func (r *ForumUserRepository) IsChannelMember(
 
 func (r *ForumUserRepository) RegisterOrLogin(
 	ctx context.Context,
-	email, username string,
+	username, email string,
 ) (*core.ForumUser, error) {
 	user, err := r.GetByEmail(ctx, email)
 	if err == nil {
@@ -117,7 +123,7 @@ func (r *ForumUserRepository) RegisterOrLogin(
 		Email:       email,
 		Username:    username,
 		DisplayName: username,
-		AvatarUrl:   "",
+		AvatarUrl:   sql.NullString{},
 		IsOnline:    true,
 		LastSeen:    time.Now(),
 		CreatedAt:   time.Now(),
@@ -198,12 +204,12 @@ func (r *ForumUserRepository) CreateMessage(
 	return &message, nil
 }
 
-func (r *ForumUserRepository) CreatMessage(
+/* func (r *ForumUserRepository) CreatMessage(
 	ctx context.Context,
 	message *core.ForumMessage,
 ) error {
 	return r.pool.QueryRow(ctx, `
-			INSERT INTO forum_messages (id, channel_id, user_id, content, message_type, parent_message_id, 
+			INSERT INTO forum_messages (id, channel_id, user_id, content, message_type, parent_message_id,
 										is_edited, is_deleted, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING id
@@ -211,7 +217,7 @@ func (r *ForumUserRepository) CreatMessage(
 		message.ParentMessageID, message.IsEdited, message.IsDeleted,
 		message.CreatedAt, message.UpdatedAt,
 	).Scan(&message.ID)
-}
+} */
 
 func (r *ForumUserRepository) MarkMessagesAsRead(ctx context.Context, channelID, userID string) error {
 	_, err := r.pool.Exec(ctx, `
@@ -430,10 +436,10 @@ func (r *ForumUserRepository) DeleteForumTables(ctx context.Context) {
 		slog.Warn("ForumUserRepository | DeleteForumTables | error occurred while deleting channel_members")
 	}
 
-	_, err = r.pool.Exec(ctx, "DROP TABLE create_direct_message_channel CASCADE")
+	/* _, err = r.pool.Exec(ctx, "DROP TABLE create_direct_message_channel CASCADE")
 	if err != nil {
 		slog.Warn("ForumUserRepository | DeleteForumTables | error occurred while deleting create_direct_message_channel")
-	}
+	} */
 
 	_, err = r.pool.Exec(ctx, "DROP TABLE forum_channels CASCADE")
 	if err != nil {

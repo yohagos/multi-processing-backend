@@ -58,8 +58,8 @@ func (s *ForumUserService) IsChannelMember(ctx context.Context, channelID, userI
 	return s.repo.IsChannelMember(ctx, channelID, userID)
 }
 
-func (s *ForumUserService) RegisterOrLogin(ctx context.Context, email, username string) (*core.ForumUser, error) {
-	return s.repo.RegisterOrLogin(ctx, email, username)
+func (s *ForumUserService) RegisterOrLogin(ctx context.Context, username, email string) (*core.ForumUser, error) {
+	return s.repo.RegisterOrLogin(ctx, username, email)
 }
 
 func (s *ForumUserService) GetUserChannels(ctx context.Context, userID string) ([]core.ForumChannel, error) {
