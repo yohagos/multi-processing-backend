@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"multi-processing-backend/internal/core"
+	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -180,16 +181,110 @@ func (r *ForumUserRepository) GetChannelMessages(
 	return pgx.CollectRows(rows, pgx.RowToStructByPos[core.ForumMessage])
 }
 
+func (r *ForumUserRepository) GetPublicChannelMessages(
+	ctx context.Context,
+	page, limit int,
+) (*core.ForumChannelMessages, error) {
+	offset := (page - 1) * limit
+	channel, err := r.GetPublicChannel(ctx)
+	if err != nil {
+		return nil, err
+	}
+	//slog.Warn("\n\nForumUserRepository | GetPublicChannelMessages() | found public channel", "data", channel)
+
+	var total int64
+	err = r.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM forum_messages
+		WHERE id = $1 AND is_deleted = false
+	`, channel.ID).Scan(&total)
+	if err != nil {
+		return nil, err
+	}
+
+	//slog.Warn("\n\nForumUserRepository | GetPublicChannelMessages() | total messages found", "data", total)
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, channel_id, user_id, content, message_type, parent_message_id, is_edited, is_deleted, created_at, updated_at
+		FROM forum_messages
+		WHERE channel_id = $1 AND is_deleted = false
+		LIMIT $2 OFFSET $3
+	`, channel.ID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []core.ForumMessage
+	for rows.Next() {
+		var msg core.ForumMessage
+		var parentMsgID sql.NullString
+
+		err := rows.Scan(
+			&msg.ID, &msg.ChannelID, &msg.UserID, &msg.Content, &msg.MessageType,
+			&parentMsgID, &msg.IsEdited, &msg.IsDeleted, &msg.CreatedAt, &msg.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, err
+		}
+		if parentMsgID.Valid {
+			msg.ParentMessageID = parentMsgID
+		}
+
+		messages = append(messages, msg)
+	}
+
+	/* messages, err := pgx.CollectRows(rows, pgx.RowToStructByPos[core.ForumMessage])
+	if err != nil {
+		return nil, err
+	} */
+	//slog.Warn("\n\nForumUserRepository | GetPublicChannelMessages() | Messages found", "data", messages)
+
+	response := &core.ForumChannelMessages{
+		Channel:  &channel,
+		Messages: messages,
+		Page:     page,
+		Limit:    limit,
+		Total:    total,
+	}
+
+	return response, nil
+}
+
+func (r *ForumUserRepository) GetPublicChannel(ctx context.Context) (core.ForumChannel, error) {
+	var ch core.ForumChannel
+	publicChannel := "Public Channel"
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, name, description, is_private, is_direct_message, created_by, created_at
+		FROM forum_channels
+		WHERE name = $1
+		LIMIT 1
+	`, publicChannel).Scan(
+		&ch.ID, &ch.Name, &ch.Description, &ch.IsPrivate, &ch.IsDirectMessage,
+		&ch.CreatedBy, &ch.CreatedAt,
+	)
+	if err != nil {
+		slog.Error("ForumUserRepository | findPublicChannelID | cannot find id of public channel", "error", err.Error())
+		return core.ForumChannel{}, err
+	}
+	return ch, nil
+}
+
 func (r *ForumUserRepository) CreateMessage(
 	ctx context.Context,
 	channelID, userID, content string,
 ) (*core.ForumMessage, error) {
 	var message core.ForumMessage
 
+	/* slog.Warn("\n\nForumUserRepository | CreateMessage() | channelID", "id", channelID)
+	slog.Warn("\n\nForumUserRepository | CreateMessage() | userID", "id", userID)
+	slog.Warn("\n\nForumUserRepository | CreateMessage() | message", "id", content) */
+
 	err := r.pool.QueryRow(ctx, `
-        INSERT INTO forum_messages (id, channel_id, user_id, content, message_type, 
+        INSERT INTO forum_messages (channel_id, user_id, content, message_type, 
                                     is_edited, is_deleted, created_at, updated_at)
-        VALUES (gen_random_uuid(), $1, $2, $3, 'text', false, false, NOW(), NOW())
+        VALUES ($1, $2, $3, 'text', false, false, NOW(), NOW())
         RETURNING id, channel_id, user_id, content, message_type, 
                   parent_message_id, is_edited, is_deleted, created_at, updated_at
     `, channelID, userID, content).Scan(
@@ -199,25 +294,12 @@ func (r *ForumUserRepository) CreateMessage(
 	)
 
 	if err != nil {
+		slog.Error("\n\nForumUserRepository | CreateMessage() | Error creating new message", "error", err.Error())
 		return nil, err
 	}
+	slog.Warn("\n\nForumUserRepository | CreateMessage() | New message was successfully created", "data", message)
 	return &message, nil
 }
-
-/* func (r *ForumUserRepository) CreatMessage(
-	ctx context.Context,
-	message *core.ForumMessage,
-) error {
-	return r.pool.QueryRow(ctx, `
-			INSERT INTO forum_messages (id, channel_id, user_id, content, message_type, parent_message_id,
-										is_edited, is_deleted, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-			RETURNING id
-		`, message.ID, message.ChannelID, message.UserID, message.Content, message.MessageType,
-		message.ParentMessageID, message.IsEdited, message.IsDeleted,
-		message.CreatedAt, message.UpdatedAt,
-	).Scan(&message.ID)
-} */
 
 func (r *ForumUserRepository) MarkMessagesAsRead(ctx context.Context, channelID, userID string) error {
 	_, err := r.pool.Exec(ctx, `
@@ -409,6 +491,107 @@ func (r *ForumUserRepository) RemoveReaction(
 	return err
 }
 
+// Creating public channel at App start
+func (r *ForumUserRepository) CreatePublicChannel(ctx context.Context) {
+	var pc core.ForumChannel
+	var channel = "Public Channel"
+
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, name, description, is_private, is_direct_message, created_by, created_at
+		FROM forum_channels
+		WHERE name = $1
+		LIMIT 1
+	`, channel).Scan(
+		&pc.ID, &pc.Name, &pc.Description, &pc.IsPrivate,
+		&pc.IsDirectMessage, &pc.CreatedBy, &pc.CreatedAt,
+	)
+
+	if err != nil {
+		slog.Warn("ForumUserRepository | CreatePublicChannel | Error while searching for Public Channel", "error", err.Error())
+
+		if pc.ID == "" {
+			slog.Info("ForumUserRepository | CreatePublicChannel | Init Channel could not be found. Creating new Public Channel")
+			id := r.createAdminUser(ctx)
+			if id == "" {
+				slog.Warn("ForumUserRepository | CreatePublicChannel | Error while Admin user", "error", err.Error())
+				os.Exit(1000)
+			}
+			pc := &core.ForumChannel{
+				Name:            "Public Channel",
+				Description:     "Public Channel",
+				IsPrivate:       false,
+				IsDirectMessage: false,
+				CreatedBy:       id,
+				CreatedAt:       time.Now(),
+			}
+
+			_, err := r.pool.Exec(ctx, `
+				INSERT INTO forum_channels (name, description, is_private, is_direct_message, created_by, created_at)
+				VALUES ($1, $2, $3, $4, $5, $6)
+				ON CONFLICT (id) DO NOTHING
+			`,
+				&pc.Name, &pc.Description, &pc.IsPrivate, &pc.IsDirectMessage,
+				&pc.CreatedBy, &pc.CreatedAt,
+			)
+
+			if err != nil {
+				slog.Warn("ForumUserRepository | CreatePublicChannel | Tried to create Public Channel but another error occurred.", "error", err.Error())
+			}
+		}
+	}
+
+	//slog.Warn("ForumUserRepository | CreatePublicChannel | Content of Public Channel found", "data", pc)
+
+	/* pc := &core.ForumChannel{
+		Name: "Public Channel",
+		Description: "Public Channel",
+		IsPrivate: false,
+		IsDirectMessage: false,
+		CreatedBy: "",
+		CreatedAt: time.Now(),
+	}
+
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO forum_channels (name, description, is_private, is_direct_message, created_by, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		CONFLICT ON (id) DO NOTHING
+	`,
+		&pc.Name, &pc.Description, &pc.IsPrivate, &pc.IsDirectMessage,
+		&pc.CreatedBy, &pc.CreatedAt,
+	)
+	if err != nil {
+		slog.Warn("ForumUserRepository | CreatePublicChannel | Erro occurred while creating Public Channel", "error", err.Error())
+	} */
+}
+
+func (r *ForumUserRepository) createAdminUser(ctx context.Context) string {
+	admin := &core.ForumUser{
+		Email:       "admin@admin.admin",
+		Username:    "admin",
+		DisplayName: "Admin",
+		AvatarUrl:   sql.NullString{},
+		IsOnline:    false,
+		LastSeen:    time.Now(),
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	var id string
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO forum_users (email, username, display_name, avatar_url, is_online, last_seen, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id
+	`,
+		admin.Email, admin.Username, admin.DisplayName, admin.AvatarUrl,
+		admin.IsOnline, admin.LastSeen, admin.CreatedAt, admin.UpdatedAt,
+	).Scan(&id)
+
+	if err != nil {
+		return ""
+	}
+
+	return id
+}
+
 // Clearing tables after shutdown
 func (r *ForumUserRepository) DeleteForumTables(ctx context.Context) {
 	_, err := r.pool.Exec(ctx, "DROP TABLE message_reactions CASCADE")
@@ -435,11 +618,6 @@ func (r *ForumUserRepository) DeleteForumTables(ctx context.Context) {
 	if err != nil {
 		slog.Warn("ForumUserRepository | DeleteForumTables | error occurred while deleting channel_members")
 	}
-
-	/* _, err = r.pool.Exec(ctx, "DROP TABLE create_direct_message_channel CASCADE")
-	if err != nil {
-		slog.Warn("ForumUserRepository | DeleteForumTables | error occurred while deleting create_direct_message_channel")
-	} */
 
 	_, err = r.pool.Exec(ctx, "DROP TABLE forum_channels CASCADE")
 	if err != nil {

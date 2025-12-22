@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"multi-processing-backend/internal/core"
 
@@ -20,6 +21,7 @@ type ForumUserService interface {
 	GetChannelMessages(ctx context.Context, channelID, userID string) ([]core.ForumMessage, error)
 	CreateMessage(ctx context.Context, channelID, userID, content string) (*core.ForumMessage, error)
 	MarkMessagesAsRead(ctx context.Context, channelID, userID string) error
+	GetPublicChannelMessages(ctx context.Context, page, limit int) (*core.ForumChannelMessages, error)
 
 	GetOrCreateDirectMessageChannel(ctx context.Context, user1ID, user2ID string) (string, error)
 	GetOnlineUsers(ctx context.Context, userID string) ([]core.ForumUser, error)
@@ -58,6 +60,7 @@ func RegisterForumUserRoutes(rg *gin.RouterGroup, h *ForumUserHandler) {
 
 	channels := rg.Group("channels")
 	{
+		channels.GET("/public", h.GetPublicChannelMessages)
 		channels.GET("/:id/members", h.GetChannelMembers)
 		channels.GET("/:id/messages", h.GetChannelMessages)
 		channels.GET("/:id/unread", h.GetUnreadCount)
@@ -162,6 +165,18 @@ func (h *ForumUserHandler) RegisterOrLogin(c *gin.Context) {
 	c.JSON(http.StatusOK, user)
 }
 
+func (h *ForumUserHandler) GetPublicChannelMessages(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "40"))
+
+	messages, err := h.service.GetPublicChannelMessages(c.Request.Context(), page, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, messages)
+}
+
 func (h *ForumUserHandler) GetUserChannels(c *gin.Context) {
 	userID := c.Param("userID")
 
@@ -195,7 +210,7 @@ func (h *ForumUserHandler) GetChannelMessages(c *gin.Context) {
 func (h *ForumUserHandler) CreateMessage(c *gin.Context) {
 	channelID := c.Param("id")
 	var req struct {
-		UserID  string `json:"userId"`
+		UserID  string `json:"user_id"`
 		Content string `json:"content"`
 	}
 
