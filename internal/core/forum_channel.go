@@ -13,9 +13,9 @@ type ForumChannel struct {
 }
 
 type ForumChannelMessages struct {
-	Channel *ForumChannel `json:"channel"`
+	Channel  ForumChannel   `json:"channel"`
 	Messages []ForumMessage `json:"messages"`
-	Page int `json:"page"`
-	Limit int `json:"limit"`
-	Total int64 `json:"total"`
+	Page     int            `json:"page"`
+	Limit    int            `json:"limit"`
+	Total    int64          `json:"total"`
 }

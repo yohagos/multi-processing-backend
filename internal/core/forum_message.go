@@ -16,4 +16,6 @@ type ForumMessage struct {
 	IsDeleted       bool           `json:"is_deleted" db:"is_deleted"`
 	CreatedAt       time.Time      `json:"created_at" db:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at" db:"updated_at"`
+	User            *ForumUser     `json:"user,omitempty"`
+	ParentMessage   *ForumMessage  `json:"parent_message,omitempty"`
 }

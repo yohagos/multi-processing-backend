@@ -190,7 +190,6 @@ func (r *ForumUserRepository) GetPublicChannelMessages(
 	if err != nil {
 		return nil, err
 	}
-	//slog.Warn("\n\nForumUserRepository | GetPublicChannelMessages() | found public channel", "data", channel)
 
 	var total int64
 	err = r.pool.QueryRow(ctx, `
@@ -202,12 +201,25 @@ func (r *ForumUserRepository) GetPublicChannelMessages(
 		return nil, err
 	}
 
-	//slog.Warn("\n\nForumUserRepository | GetPublicChannelMessages() | total messages found", "data", total)
-
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, channel_id, user_id, content, message_type, parent_message_id, is_edited, is_deleted, created_at, updated_at
-		FROM forum_messages
-		WHERE channel_id = $1 AND is_deleted = false
+		SELECT 
+			fm.id, fm.channel_id, fm.user_id, fm.content, fm.message_type, 
+			fm.parent_message_id, fm.is_edited, fm.is_deleted, fm.created_at, fm.updated_at,
+
+			fu.id, fu.email, fu.username, fu.display_name, fu.avatar_url, fu.is_online,
+			fu.last_seen, fu.created_at, fu.updated_at,
+
+			pf.id, pf.channel_id, pf.user_id, pf.content, pf.message_type, 
+			pf.parent_message_id, pf.is_edited, pf.is_deleted, pf.created_at, pf.updated_at,
+
+			pfu.id, pfu.email, pfu.username, pfu.display_name, pfu.avatar_url, pfu.is_online,
+			pfu.last_seen, pfu.created_at, pfu.updated_at
+		FROM forum_messages fm
+		JOIN forum_users fu ON fm.user_id = fu.id
+		LEFT JOIN forum_messages pf ON fm.parent_message_id = pf.id AND pf.is_deleted = false
+		LEFT JOIN forum_users pfu ON pf.user_id = pfu.id
+		WHERE fm.channel_id = $1 AND fm.is_deleted = false
+		ORDER BY fm.created_at ASC
 		LIMIT $2 OFFSET $3
 	`, channel.ID, limit, offset)
 	if err != nil {
@@ -219,30 +231,106 @@ func (r *ForumUserRepository) GetPublicChannelMessages(
 	for rows.Next() {
 		var msg core.ForumMessage
 		var parentMsgID sql.NullString
+		var avatarUrl sql.NullString
+
+		msg.User = &core.ForumUser{}
+
+		var userID, userEmail, userUsername, userDisplayName sql.NullString
+		var userIsOnline sql.NullBool
+		var userLastSeen, userCreatedAt, userUpdatedAt sql.NullTime
+
+		var parentMessageID sql.NullString
+		var parentMessageChannelID sql.NullString
+		var parentMessageUserID sql.NullString
+		var parentMessageContent sql.NullString
+		var parentMessageType sql.NullString
+		var parentMessageIsEdited sql.NullBool
+		var parentMessageIsDeleted sql.NullBool
+		var parentMessageCreatedAt, parentMessageUpdatedAt sql.NullTime
+
+		var parentUserID, parentUserEmail, parentUserUsername, parentUserDisplayName sql.NullString
+		var parentUserAvatar sql.NullString
+		var parentUserIsOnline sql.NullBool
+		var parentUserLastSeen, parentUserCreatedAt, parentUserUpdatedAt sql.NullTime
 
 		err := rows.Scan(
 			&msg.ID, &msg.ChannelID, &msg.UserID, &msg.Content, &msg.MessageType,
 			&parentMsgID, &msg.IsEdited, &msg.IsDeleted, &msg.CreatedAt, &msg.UpdatedAt,
+
+			&userID, &userEmail, &userUsername, &userDisplayName,
+			&avatarUrl, &userIsOnline, &userLastSeen, &userCreatedAt, &userUpdatedAt,
+
+			&parentMessageID, &parentMessageChannelID, &parentMessageUserID,
+			&parentMessageContent, &parentMessageType, &parentMsgID,
+			&parentMessageIsEdited, &parentMessageIsDeleted,
+			&parentMessageCreatedAt, &parentMessageUpdatedAt,
+
+			&parentUserID, &parentUserEmail, &parentUserUsername, &parentUserDisplayName,
+			&parentUserAvatar, &parentUserIsOnline,
+			&parentUserLastSeen, &parentUserCreatedAt, &parentUserUpdatedAt,
 		)
 
 		if err != nil {
 			return nil, err
 		}
+
 		if parentMsgID.Valid {
 			msg.ParentMessageID = parentMsgID
+
+			if parentMessageID.Valid {
+				msg.ParentMessage = &core.ForumMessage{
+					ID:          parentMessageID.String,
+					ChannelID:   parentMessageChannelID.String,
+					UserID:      parentMessageUserID.String,
+					Content:     parentMessageContent.String,
+					MessageType: parentMessageType.String,
+					IsEdited:    parentMessageIsEdited.Bool,
+					IsDeleted:   parentMessageIsDeleted.Bool,
+					CreatedAt:   parentMessageCreatedAt.Time,
+					UpdatedAt:   parentMessageUpdatedAt.Time,
+					User: &core.ForumUser{
+						ID:          parentUserID.String,
+						Email:       parentUserEmail.String,
+						Username:    parentUserUsername.String,
+						DisplayName: parentUserDisplayName.String,
+						AvatarUrl:   parentUserAvatar,
+						IsOnline:    parentUserIsOnline.Bool,
+						LastSeen:    parentUserLastSeen.Time,
+						CreatedAt:   parentUserCreatedAt.Time,
+						UpdatedAt:   parentUserUpdatedAt.Time,
+					},
+				}
+			}
+		}
+
+		if userID.Valid {
+			msg.User = &core.ForumUser{
+				ID:          userID.String,
+				Email:       userEmail.String,
+				Username:    userUsername.String,
+				DisplayName: userDisplayName.String,
+				AvatarUrl:   avatarUrl,
+				IsOnline:    userIsOnline.Bool,
+				LastSeen:    userLastSeen.Time,
+				CreatedAt:   userCreatedAt.Time,
+				UpdatedAt:   userUpdatedAt.Time,
+			}
+		}
+
+		if avatarUrl.Valid {
+			msg.User.AvatarUrl = avatarUrl
 		}
 
 		messages = append(messages, msg)
 	}
 
-	/* messages, err := pgx.CollectRows(rows, pgx.RowToStructByPos[core.ForumMessage])
-	if err != nil {
-		return nil, err
-	} */
-	//slog.Warn("\n\nForumUserRepository | GetPublicChannelMessages() | Messages found", "data", messages)
+	if messages == nil {
+		slog.Warn("\n\nForumUserRepository | GetPublicChannelMessages() | Messages are empty / nil and will be replaced with an empty array")
+		messages = []core.ForumMessage{}
+	}
 
 	response := &core.ForumChannelMessages{
-		Channel:  &channel,
+		Channel:  channel,
 		Messages: messages,
 		Page:     page,
 		Limit:    limit,
@@ -277,10 +365,6 @@ func (r *ForumUserRepository) CreateMessage(
 ) (*core.ForumMessage, error) {
 	var message core.ForumMessage
 
-	/* slog.Warn("\n\nForumUserRepository | CreateMessage() | channelID", "id", channelID)
-	slog.Warn("\n\nForumUserRepository | CreateMessage() | userID", "id", userID)
-	slog.Warn("\n\nForumUserRepository | CreateMessage() | message", "id", content) */
-
 	err := r.pool.QueryRow(ctx, `
         INSERT INTO forum_messages (channel_id, user_id, content, message_type, 
                                     is_edited, is_deleted, created_at, updated_at)
@@ -297,7 +381,6 @@ func (r *ForumUserRepository) CreateMessage(
 		slog.Error("\n\nForumUserRepository | CreateMessage() | Error creating new message", "error", err.Error())
 		return nil, err
 	}
-	slog.Warn("\n\nForumUserRepository | CreateMessage() | New message was successfully created", "data", message)
 	return &message, nil
 }
 
@@ -507,10 +590,7 @@ func (r *ForumUserRepository) CreatePublicChannel(ctx context.Context) {
 	)
 
 	if err != nil {
-		slog.Warn("ForumUserRepository | CreatePublicChannel | Error while searching for Public Channel", "error", err.Error())
-
 		if pc.ID == "" {
-			slog.Info("ForumUserRepository | CreatePublicChannel | Init Channel could not be found. Creating new Public Channel")
 			id := r.createAdminUser(ctx)
 			if id == "" {
 				slog.Warn("ForumUserRepository | CreatePublicChannel | Error while Admin user", "error", err.Error())
@@ -539,29 +619,6 @@ func (r *ForumUserRepository) CreatePublicChannel(ctx context.Context) {
 			}
 		}
 	}
-
-	//slog.Warn("ForumUserRepository | CreatePublicChannel | Content of Public Channel found", "data", pc)
-
-	/* pc := &core.ForumChannel{
-		Name: "Public Channel",
-		Description: "Public Channel",
-		IsPrivate: false,
-		IsDirectMessage: false,
-		CreatedBy: "",
-		CreatedAt: time.Now(),
-	}
-
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO forum_channels (name, description, is_private, is_direct_message, created_by, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		CONFLICT ON (id) DO NOTHING
-	`,
-		&pc.Name, &pc.Description, &pc.IsPrivate, &pc.IsDirectMessage,
-		&pc.CreatedBy, &pc.CreatedAt,
-	)
-	if err != nil {
-		slog.Warn("ForumUserRepository | CreatePublicChannel | Erro occurred while creating Public Channel", "error", err.Error())
-	} */
 }
 
 func (r *ForumUserRepository) createAdminUser(ctx context.Context) string {
@@ -592,7 +649,6 @@ func (r *ForumUserRepository) createAdminUser(ctx context.Context) string {
 	return id
 }
 
-// Clearing tables after shutdown
 func (r *ForumUserRepository) DeleteForumTables(ctx context.Context) {
 	_, err := r.pool.Exec(ctx, "DROP TABLE message_reactions CASCADE")
 	if err != nil {
