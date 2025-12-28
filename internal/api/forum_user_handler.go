@@ -8,6 +8,7 @@ import (
 	"multi-processing-backend/internal/core"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/exp/slog"
 )
 
 type ForumUserService interface {
@@ -19,7 +20,7 @@ type ForumUserService interface {
 	RegisterOrLogin(ctx context.Context, email, username string) (*core.ForumUser, error)
 	GetUserChannels(ctx context.Context, userID string) ([]core.ForumChannel, error)
 	GetChannelMessages(ctx context.Context, channelID, userID string) ([]core.ForumMessage, error)
-	CreateMessage(ctx context.Context, channelID, userID, content string) (*core.ForumMessage, error)
+	CreateMessage(ctx context.Context, channelID, userID, content, parentMessageId string) (*core.ForumMessage, error)
 	MarkMessagesAsRead(ctx context.Context, channelID, userID string) error
 	GetPublicChannelMessages(ctx context.Context, page, limit int) (*core.ForumChannelMessages, error)
 
@@ -212,6 +213,7 @@ func (h *ForumUserHandler) CreateMessage(c *gin.Context) {
 	var req struct {
 		UserID  string `json:"user_id"`
 		Content string `json:"content"`
+		ParentMessageID string `json:"parent_message_id"`
 	}
 
 	if err := c.BindJSON(&req); err != nil {
@@ -219,7 +221,9 @@ func (h *ForumUserHandler) CreateMessage(c *gin.Context) {
 		return
 	}
 
-	message, err := h.service.CreateMessage(c.Request.Context(), channelID, req.UserID, req.Content)
+	slog.Warn("\nForumUserHandler | Create Message () | Requests", "data", req)
+
+	message, err := h.service.CreateMessage(c.Request.Context(), channelID, req.UserID, req.Content, req.ParentMessageID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

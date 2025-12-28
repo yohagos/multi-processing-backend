@@ -275,7 +275,7 @@ func (r *ForumUserRepository) GetPublicChannelMessages(
 		}
 
 		if parentMsgID.Valid {
-			msg.ParentMessageID = parentMsgID
+			msg.ParentMessageID = parentMsgID.String
 
 			if parentMessageID.Valid {
 				msg.ParentMessage = &core.ForumMessage{
@@ -361,17 +361,49 @@ func (r *ForumUserRepository) GetPublicChannel(ctx context.Context) (core.ForumC
 
 func (r *ForumUserRepository) CreateMessage(
 	ctx context.Context,
-	channelID, userID, content string,
+	channelID, userID, content, parentMessageID string,
 ) (*core.ForumMessage, error) {
 	var message core.ForumMessage
 
+	var parentMsgID sql.NullString
+
+	if parentMessageID != "" {
+		var exists bool
+		err := r.pool.QueryRow(ctx, `
+			SELECT EXISTS(
+				SELECT 1 FROM forum_messages WHERE id = $1 AND is_deleted = false
+			)
+		`, parentMessageID).Scan(&exists)
+		if err != nil {
+			return nil, err
+		}
+
+		if exists {
+			parentMsgID = sql.NullString{
+				String: parentMessageID,
+				Valid:  true,
+			}
+		} else {
+			slog.Warn("ParentMessageID does not exist", "parentMessageID", parentMessageID)
+			parentMsgID = sql.NullString{Valid: false}
+		}
+	} else {
+		parentMsgID = sql.NullString{Valid: false}
+	}
+
+	slog.Warn("\nForumUserRepository | CreateMessage () | Requests",
+		"userID", userID,
+		"content", content,
+		"parentMessageID", parentMessageID,
+	)
+
 	err := r.pool.QueryRow(ctx, `
-        INSERT INTO forum_messages (channel_id, user_id, content, message_type, 
+        INSERT INTO forum_messages (channel_id, user_id, content, message_type, parent_message_id,
                                     is_edited, is_deleted, created_at, updated_at)
-        VALUES ($1, $2, $3, 'text', false, false, NOW(), NOW())
+        VALUES ($1, $2, $3, 'text', $4, false, false, NOW(), NOW())
         RETURNING id, channel_id, user_id, content, message_type, 
                   parent_message_id, is_edited, is_deleted, created_at, updated_at
-    `, channelID, userID, content).Scan(
+    `, channelID, userID, content, parentMsgID.String).Scan(
 		&message.ID, &message.ChannelID, &message.UserID, &message.Content, &message.MessageType,
 		&message.ParentMessageID, &message.IsEdited, &message.IsDeleted,
 		&message.CreatedAt, &message.UpdatedAt,
@@ -381,6 +413,10 @@ func (r *ForumUserRepository) CreateMessage(
 		slog.Error("\n\nForumUserRepository | CreateMessage() | Error creating new message", "error", err.Error())
 		return nil, err
 	}
+
+	slog.Warn("\nForumUserRepository | CreateMessage () | Saved data row of new message",
+		"message", message,
+	)
 	return &message, nil
 }
 
