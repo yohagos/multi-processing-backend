@@ -195,7 +195,7 @@ func (r *ForumUserRepository) GetPublicChannelMessages(
 	err = r.pool.QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM forum_messages
-		WHERE id = $1 AND is_deleted = false
+		WHERE channel_id = $1 AND is_deleted = false
 	`, channel.ID).Scan(&total)
 	if err != nil {
 		return nil, err
@@ -274,7 +274,7 @@ func (r *ForumUserRepository) GetPublicChannelMessages(
 			return nil, err
 		}
 
-		if parentMsgID.Valid {
+		if parentMessageID.Valid {
 			msg.ParentMessageID = parentMsgID.String
 
 			if parentMessageID.Valid {
@@ -325,7 +325,6 @@ func (r *ForumUserRepository) GetPublicChannelMessages(
 	}
 
 	if messages == nil {
-		slog.Warn("\n\nForumUserRepository | GetPublicChannelMessages() | Messages are empty / nil and will be replaced with an empty array")
 		messages = []core.ForumMessage{}
 	}
 
@@ -365,37 +364,27 @@ func (r *ForumUserRepository) CreateMessage(
 ) (*core.ForumMessage, error) {
 	var message core.ForumMessage
 
-	var parentMsgID sql.NullString
+	var parMsgValue interface{}
 
 	if parentMessageID != "" {
 		var exists bool
 		err := r.pool.QueryRow(ctx, `
-			SELECT EXISTS(
-				SELECT 1 FROM forum_messages WHERE id = $1 AND is_deleted = false
-			)
+			SELECT EXISTS(SELECT 1 FROM forum_messages WHERE id = $1 AND is_deleted = false)
 		`, parentMessageID).Scan(&exists)
 		if err != nil {
 			return nil, err
 		}
 
 		if exists {
-			parentMsgID = sql.NullString{
-				String: parentMessageID,
-				Valid:  true,
-			}
+			parMsgValue = parentMessageID
 		} else {
-			slog.Warn("ParentMessageID does not exist", "parentMessageID", parentMessageID)
-			parentMsgID = sql.NullString{Valid: false}
+			parMsgValue = nil
 		}
 	} else {
-		parentMsgID = sql.NullString{Valid: false}
+		parMsgValue = nil
 	}
 
-	slog.Warn("\nForumUserRepository | CreateMessage () | Requests",
-		"userID", userID,
-		"content", content,
-		"parentMessageID", parentMessageID,
-	)
+	var scannedPMsgID sql.NullString
 
 	err := r.pool.QueryRow(ctx, `
         INSERT INTO forum_messages (channel_id, user_id, content, message_type, parent_message_id,
@@ -403,20 +392,21 @@ func (r *ForumUserRepository) CreateMessage(
         VALUES ($1, $2, $3, 'text', $4, false, false, NOW(), NOW())
         RETURNING id, channel_id, user_id, content, message_type, 
                   parent_message_id, is_edited, is_deleted, created_at, updated_at
-    `, channelID, userID, content, parentMsgID.String).Scan(
+    `, channelID, userID, content, parMsgValue).Scan(
 		&message.ID, &message.ChannelID, &message.UserID, &message.Content, &message.MessageType,
-		&message.ParentMessageID, &message.IsEdited, &message.IsDeleted,
+		&scannedPMsgID, &message.IsEdited, &message.IsDeleted,
 		&message.CreatedAt, &message.UpdatedAt,
 	)
 
 	if err != nil {
-		slog.Error("\n\nForumUserRepository | CreateMessage() | Error creating new message", "error", err.Error())
 		return nil, err
 	}
 
-	slog.Warn("\nForumUserRepository | CreateMessage () | Saved data row of new message",
-		"message", message,
-	)
+	if scannedPMsgID.Valid {
+		message.ParentMessageID = scannedPMsgID.String
+	} else {
+		message.ParentMessageID = ""
+	}
 	return &message, nil
 }
 
