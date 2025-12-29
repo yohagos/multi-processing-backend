@@ -8,7 +8,6 @@ import (
 	"multi-processing-backend/internal/core"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/exp/slog"
 )
 
 type ForumUserService interface {
@@ -211,8 +210,8 @@ func (h *ForumUserHandler) GetChannelMessages(c *gin.Context) {
 func (h *ForumUserHandler) CreateMessage(c *gin.Context) {
 	channelID := c.Param("id")
 	var req struct {
-		UserID  string `json:"user_id"`
-		Content string `json:"content"`
+		UserID          string `json:"user_id"`
+		Content         string `json:"content"`
 		ParentMessageID string `json:"parent_message_id"`
 	}
 
@@ -220,8 +219,6 @@ func (h *ForumUserHandler) CreateMessage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
-
-	slog.Warn("\nForumUserHandler | Create Message () | Requests", "data", req)
 
 	message, err := h.service.CreateMessage(c.Request.Context(), channelID, req.UserID, req.Content, req.ParentMessageID)
 	if err != nil {
@@ -369,7 +366,7 @@ func (h *ForumUserHandler) EditMessage(c *gin.Context) {
 
 func (h *ForumUserHandler) DeleteMessage(c *gin.Context) {
 	messageID := c.Param("id")
-	userID := c.Query("userID")
+	userID := c.Query("user_id")
 
 	if userID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "userID query parameter required"})
