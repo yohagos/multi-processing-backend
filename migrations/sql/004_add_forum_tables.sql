@@ -67,21 +67,19 @@ DECLARE
     channel_id UUID;
     channel_name TEXT;
 BEGIN
-    channel_name := (
-        SELECT STRING_AGG(u.username, ' & ')
-        FROM forum_users u
-        WHERE u.id IN (user1_id, user2_id)
-        ORDER BY u.username
-    );
-
-    INSERT INTO forum_channels (name, is_private, is_direct_message, created_by)
-    VALUES (channel_name, true, true, user1_id)
+    SELECT STRING_AGG(u.username, ' & ' ORDER BY u.username)
+    INTO channel_name
+    FROM forum_users u
+    WHERE u.id IN (user1_id, user2_id);
+    
+    INSERT INTO forum_channels (name, is_private, is_direct_message, created_by, created_at)
+    VALUES (channel_name, true, true, user1_id, NOW())
     RETURNING id INTO channel_id;
-
-    INSERT INTO channel_members (channel_id, user_id, role) VALUES
-    (channel_id, user1_id, 'member'),
-    (channel_id, user2_id, 'member');
-
+    
+    INSERT INTO channel_members (channel_id, user_id, role, joined_at) VALUES
+    (channel_id, user1_id, 'member', NOW()),
+    (channel_id, user2_id, 'member', NOW());
+    
     RETURN channel_id;
 END;
 $$ LANGUAGE plpgsql;
