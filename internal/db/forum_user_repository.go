@@ -142,6 +142,7 @@ func (r *ForumUserRepository) GetUserChannels(
 	ctx context.Context,
 	userID string,
 ) ([]core.ForumChannel, error) {
+	slog.Info("\nForumRepository | \nGetUserChannels() | User ID received", "data", userID)
 	rows, err := r.pool.Query(ctx, `
 		SELECT fc.id, fc.name, fc.description, fc.is_private, fc.is_direct_message, fc.created_by, fc.created_at
 		FROM forum_channels fc
@@ -153,8 +154,30 @@ func (r *ForumUserRepository) GetUserChannels(
 		return nil, err
 	}
 	defer rows.Close()
+	/* slog.Info("\nForumRepository | \nGetUserChannels() | User channels found", "data", rows)
 
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[core.ForumChannel])
+	return pgx.CollectRows(rows, pgx.RowToStructByPos[core.ForumChannel]) */
+	var channels []core.ForumChannel
+	for rows.Next() {
+		var ch core.ForumChannel
+		var description sql.NullString
+
+		err := rows.Scan(
+			&ch.ID, &ch.Name, &description, &ch.IsPrivate, &ch.IsDirectMessage,
+			&ch.CreatedBy, &ch.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if description.Valid {
+			ch.Description = description.String
+		}
+
+		channels = append(channels, ch)
+	}
+	slog.Info("\nForumRepository | \nGetUserChannels() | User channels found", "data", channels)
+	return channels, nil
 }
 
 func (r *ForumUserRepository) GetChannelMessages(

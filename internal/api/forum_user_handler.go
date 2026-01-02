@@ -8,6 +8,7 @@ import (
 	"multi-processing-backend/internal/core"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/exp/slog"
 )
 
 type ForumUserService interface {
@@ -180,11 +181,15 @@ func (h *ForumUserHandler) GetPublicChannelMessages(c *gin.Context) {
 func (h *ForumUserHandler) GetUserChannels(c *gin.Context) {
 	userID := c.Param("userID")
 
+	slog.Info("\nForumHandler | \nGetUserChannels() | UserID received", "id", userID)
+
 	channels, err := h.service.GetUserChannels(c.Request.Context(), userID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	slog.Info("\nForumHandler | \nGetUserChannels() | Channels found for User", "data", channels)
 
 	c.JSON(http.StatusOK, channels)
 }
