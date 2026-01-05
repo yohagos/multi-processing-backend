@@ -142,7 +142,6 @@ func (r *ForumUserRepository) GetUserChannels(
 	ctx context.Context,
 	userID string,
 ) ([]core.ForumChannel, error) {
-	slog.Info("\nForumRepository | \nGetUserChannels() | User ID received", "data", userID)
 	rows, err := r.pool.Query(ctx, `
 		SELECT fc.id, fc.name, fc.description, fc.is_private, fc.is_direct_message, fc.created_by, fc.created_at
 		FROM forum_channels fc
@@ -154,9 +153,7 @@ func (r *ForumUserRepository) GetUserChannels(
 		return nil, err
 	}
 	defer rows.Close()
-	/* slog.Info("\nForumRepository | \nGetUserChannels() | User channels found", "data", rows)
 
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[core.ForumChannel]) */
 	var channels []core.ForumChannel
 	for rows.Next() {
 		var ch core.ForumChannel
@@ -176,7 +173,6 @@ func (r *ForumUserRepository) GetUserChannels(
 
 		channels = append(channels, ch)
 	}
-	slog.Info("\nForumRepository | \nGetUserChannels() | User channels found", "data", channels)
 	return channels, nil
 }
 
@@ -184,10 +180,18 @@ func (r *ForumUserRepository) GetChannelMessages(
 	ctx context.Context,
 	channelID, userID string,
 ) ([]core.ForumMessage, error) {
+	const operation = "ForumRepository.GetChannelMessages"
 	isMember, err := r.IsChannelMember(ctx, channelID, userID)
-	if err != nil || !isMember {
-		return nil, fmt.Errorf("access denied or channel not found")
-	}
+	 if err != nil {
+        slog.Error(operation+" IsChannelMember failed", 
+            "error", err, "userID", userID, "channelID", channelID)
+        return nil, fmt.Errorf("%s: access check failed: %w", operation, err)
+    }
+    if !isMember {
+        slog.Warn(operation+" access denied", 
+            "userID", userID, "channelID", channelID)
+        return nil, fmt.Errorf("%s: access denied", operation)
+    }
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, channel_id, user_id, content, message_type, parent_message_id, 
@@ -197,11 +201,43 @@ func (r *ForumUserRepository) GetChannelMessages(
         ORDER BY created_at ASC
 	`, channelID)
 	if err != nil {
-		return nil, err
-	}
+        slog.Error(operation+" query failed", 
+            "error", err, "channelID", channelID)
+        return nil, fmt.Errorf("%s: database query failed: %w", operation, err)
+    }
 	defer rows.Close()
 
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[core.ForumMessage])
+	var msgs []core.ForumMessage
+	for rows.Next() {
+		var m core.ForumMessage
+		var parentMessageID sql.NullString
+
+		err := rows.Scan(
+			&m.ID, &m.ChannelID, &m.UserID, &m.Content, &m.MessageType,
+			&parentMessageID, &m.IsEdited, &m.IsDeleted, &m.CreatedAt, &m.UpdatedAt,
+		)
+		 if err != nil {
+            slog.Error(operation+" row scan failed", "error", err)
+            return nil, fmt.Errorf("%s: failed to scan row: %w", operation, err)
+        }
+
+		if parentMessageID.Valid {
+			m.ParentMessageID = parentMessageID.String
+		}
+
+		msgs = append(msgs, m)
+	}
+
+	if err := rows.Err(); err != nil {
+        slog.Error(operation+" rows iteration failed", "error", err)
+        return nil, fmt.Errorf("%s: rows iteration failed: %w", operation, err)
+    }
+
+	if msgs == nil {
+		msgs = []core.ForumMessage{}
+	}
+
+	return msgs, nil
 }
 
 func (r *ForumUserRepository) GetPublicChannelMessages(

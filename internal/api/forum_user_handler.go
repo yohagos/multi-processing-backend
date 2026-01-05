@@ -195,7 +195,7 @@ func (h *ForumUserHandler) GetUserChannels(c *gin.Context) {
 }
 
 func (h *ForumUserHandler) GetChannelMessages(c *gin.Context) {
-	channelID := c.Param("channelID")
+	channelID := c.Param("id")
 	userID := c.Query("userID")
 
 	if userID == "" {
@@ -209,7 +209,7 @@ func (h *ForumUserHandler) GetChannelMessages(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusFound, messages)
+	c.JSON(http.StatusOK, messages)
 }
 
 func (h *ForumUserHandler) CreateMessage(c *gin.Context) {
