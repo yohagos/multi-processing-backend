@@ -63,6 +63,7 @@ func main() {
 	cryptoService := services.NewCryptoService(cryptoRepo)
 
 	forumRepo := db.NewForumUserRepository(pool)
+	forumRepo.CreatePublicChannel(ctx)
 	forumService := services.NewForumUserService(forumRepo)
 	forumHandler := api.NewForumUserHandler(forumService)
 
