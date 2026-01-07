@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/exp/slog"
 )
 
 var (
@@ -419,36 +420,36 @@ func (s *Seeder) getAllSkills(ctx context.Context) []core.Skill {
 func (s *Seeder) DeleteDevData(ctx context.Context) {
 	_, err := s.pool.Exec(ctx, `DROP TABLE departments CASCADE`)
 	if err != nil {
-
+		slog.Warn("Seeder | DeleteDevData | error occurred while deleting departments")
 	}
 
 	_, err = s.pool.Exec(ctx, `DROP TABLE positions CASCADE`)
 	if err != nil {
-
+		slog.Warn("Seeder | DeleteDevData | error occurred while deleting positions")
 	}
 
 	_, err = s.pool.Exec(ctx, `DROP TABLE users CASCADE`)
 	if err != nil {
-
+		slog.Warn("Seeder | DeleteDevData | error occurred while deleting users")
 	}
 
 	_, err = s.pool.Exec(ctx, `DROP TABLE salaries CASCADE`)
 	if err != nil {
-
+		slog.Warn("Seeder | DeleteDevData | error occurred while deleting salaries")
 	}
 
 	_, err = s.pool.Exec(ctx, `DROP TABLE addresses CASCADE`)
 	if err != nil {
-
+		slog.Warn("Seeder | DeleteDevData | error occurred while deleting addresses")
 	}
 
 	_, err = s.pool.Exec(ctx, `DROP TABLE skills CASCADE`)
 	if err != nil {
-
+		slog.Warn("Seeder | DeleteDevData | error occurred while deleting skills")
 	}
 
 	_, err = s.pool.Exec(ctx, `DROP TABLE user_skills CASCADE`)
 	if err != nil {
-
+		slog.Warn("Seeder | DeleteDevData | error occurred while deleting user_skills")
 	}
 }

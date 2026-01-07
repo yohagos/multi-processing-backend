@@ -1,7 +1,6 @@
 package db
 
 import (
-	"bufio"
 	"context"
 	"io/fs"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/exp/slog"
 )
 
 func ConnectDatabase(ctx context.Context, url string) *pgxpool.Pool {
@@ -56,33 +56,15 @@ func listFiles(root string) ([]string, error) {
 }
 
 func applyMigrationFile(ctx context.Context, pool *pgxpool.Pool, path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	var stmt strings.Builder
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "--") {
-			continue
-		}
-		stmt.WriteString(line + " ")
-		if strings.HasSuffix(line, ";") {
-			sql := strings.TrimSpace(stmt.String())
-			if _, err := pool.Exec(ctx, sql); err != nil {
-				return err
-			}
-			stmt.Reset()
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	return nil
+    content, err := os.ReadFile(path)
+    if err != nil {
+        return err
+    }
+    
+    if _, err := pool.Exec(ctx, string(content)); err != nil {
+        slog.Error("Apply Migration | Pool Execution Error => ", "err", err)
+        return err
+    }
+    
+    return nil
 }
