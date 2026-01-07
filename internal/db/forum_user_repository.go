@@ -141,8 +141,125 @@ func (r *ForumUserRepository) RegisterOrLogin(
 func (r *ForumUserRepository) GetUserChannels(
 	ctx context.Context,
 	userID string,
-) ([]core.ForumChannel, error) {
+	messageLimit int,
+) ([]core.ForumChannelWithLastMessages, error) {
 	rows, err := r.pool.Query(ctx, `
+		SELECT
+			fc.id, fc.name, fc.description, fc.is_private, fc.is_direct_message,
+			fc.created_by, fc.created_at,
+
+			fm.id, fm.channel_id, fm.user_id, fm.content, fm.message_type,
+			fm.parent_message_id, fm.is_edited, fm.is_deleted, 
+			fm.created_at, fm.updated_at,
+
+			fu.id, fu.email, fu.username, fu.display_name, fu.avater_url,
+			fu.is_online, fu.last_seen, fu.created_at, fu.updated_at,
+		FROM forum_channels fc
+		JOIN channel_members cm ON fc.id = cm.channel_id
+		LEFT JOIN LATERAL (
+			SELECT * FROM forum_messages
+			WHERE channel_id = fc.id AND is_deleted = false
+			ORDER BY created_at ASC
+			LIMIT $2
+		) fm ON true
+		LEFT JOIN forum_users fu ON fm.user_id = fu.id
+		WHERE cm.user_id = $1
+		ORDER BY fc.created_at ASC, fm.created_at ASC
+	`, userID, messageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	channelsMap := make(map[string]*core.ForumChannelWithLastMessages)
+
+	for rows.Next() {
+		var channelID string
+		var ch core.ForumChannel
+		var description sql.NullString
+
+		var msgID, msgChannelID, msgUserID, msgContent, msgType, parentMsgID sql.NullString
+		var msgIsEdited, msgIsDeleted sql.NullBool
+		var msgCreatedAt, msgUpdatedAt sql.NullTime
+
+		var uID, uEmail, uUsername, uDisplayName, uAvatarUrl sql.NullString
+		var uIsOnline sql.NullBool
+		var uLastSeen, uCreatedAt, uUpdatedAt sql.NullTime
+
+		err := rows.Scan(
+			&channelID, &ch.Name, &description, &ch.IsPrivate, &ch.IsDirectMessage,
+			&ch.CreatedBy, &ch.CreatedAt,
+
+			&msgID, &msgChannelID, &msgUserID, &msgContent, &msgType,
+			&parentMsgID, &msgIsEdited, &msgIsDeleted, &msgCreatedAt, &msgUpdatedAt,
+
+			&uID, &uEmail, &uUsername, &uDisplayName, &uAvatarUrl, &uIsOnline,
+			&uLastSeen, &uCreatedAt, &uUpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		ch.ID = channelID
+		if description.Valid {
+			ch.Description = description.String
+		}
+
+		if _, exists := channelsMap[channelID]; !exists {
+			channelsMap[channelID] = &core.ForumChannelWithLastMessages{
+				Channel:      ch,
+				LastMessages: []core.ForumMessageWithUser{},
+			}
+		}
+
+		channelData := channelsMap[channelID]
+
+		if msgID.Valid {
+			msg := core.ForumMessage{
+				ID:              msgID.String,
+				ChannelID:       msgChannelID.String,
+				UserID:          msgUserID.String,
+				Content:         msgContent.String,
+				MessageType:     msgType.String,
+				ParentMessageID: parentMsgID.String,
+				IsEdited:        msgIsEdited.Bool,
+				IsDeleted:       msgIsDeleted.Bool,
+				CreatedAt:       msgCreatedAt.Time,
+				UpdatedAt:       msgUpdatedAt.Time,
+			}
+
+			var user *core.ForumUser
+			if uID.Valid {
+				user = &core.ForumUser{
+					ID:          uID.String,
+					Email:       uEmail.String,
+					Username:    uUsername.String,
+					DisplayName: uDisplayName.String,
+					AvatarUrl:   uAvatarUrl,
+					IsOnline:    uIsOnline.Bool,
+					LastSeen:    uLastSeen.Time,
+					CreatedAt:   uCreatedAt.Time,
+					UpdatedAt:   uUpdatedAt.Time,
+				}
+			}
+
+			channelData.LastMessages = append(channelData.LastMessages, core.ForumMessageWithUser{
+				Message: msg,
+				User:    user,
+			})
+		}
+	}
+
+	channels := make([]core.ForumChannelWithLastMessages, 0, len(channelsMap))
+	for _, channelData := range channelsMap {
+		if channelData.LastMessages == nil {
+			channelData.LastMessages = []core.ForumMessageWithUser{}
+		}
+		channels = append(channels, *channelData)
+	}
+	return channels, nil
+
+	/* rows, err := r.pool.Query(ctx, `
 		SELECT fc.id, fc.name, fc.description, fc.is_private, fc.is_direct_message, fc.created_by, fc.created_at
 		FROM forum_channels fc
 		JOIN channel_members cm ON fc.id = cm.channel_id
@@ -173,25 +290,108 @@ func (r *ForumUserRepository) GetUserChannels(
 
 		channels = append(channels, ch)
 	}
-	return channels, nil
+	return channels, nil */
 }
 
 func (r *ForumUserRepository) GetChannelMessages(
 	ctx context.Context,
 	channelID, userID string,
-) ([]core.ForumMessage, error) {
+	limit, offset int,
+) ([]core.ForumMessageWithUser, error) {
 	const operation = "ForumRepository.GetChannelMessages"
+
 	isMember, err := r.IsChannelMember(ctx, channelID, userID)
-	 if err != nil {
-        slog.Error(operation+" IsChannelMember failed", 
-            "error", err, "userID", userID, "channelID", channelID)
-        return nil, fmt.Errorf("%s: access check failed: %w", operation, err)
-    }
-    if !isMember {
-        slog.Warn(operation+" access denied", 
-            "userID", userID, "channelID", channelID)
-        return nil, fmt.Errorf("%s: access denied", operation)
-    }
+	if err != nil {
+		return nil, fmt.Errorf("%s: access check failed: %w", operation, err)
+	}
+	if !isMember {
+		return nil, fmt.Errorf("%s: access denied", operation)
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT
+			fm.id, fm.channel_id, fm.user_id, fm.content,
+			fm.message_type, fm.parent_message_id, fm.is_edited,
+			fm.is_deleted, fm.created_at, fm.updated_at,
+
+			fu.id, fu.email, fu.username, fu.display_name,
+			fu.avatar_url, fu.is_online, fu.last_seen,
+			fu.created_at, fu.updated_at,
+		FROM forum_messages fm
+		LEFT JOIN forum_users fu ON fm.user_id = fu.id
+		WHERE fm.channel_id = $1 AND fm.is_deleted = false
+		ORDER BY fm.created_at ASC
+		LIMIT $2 OFFSET $3
+	`, channelID, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("%s: database query failed: %w", operation, err)
+	}
+	defer rows.Close()
+
+	var messages []core.ForumMessageWithUser
+
+	for rows.Next() {
+		var msg core.ForumMessage
+		var pMsgID sql.NullString
+
+		var uID, uEmail, uUsername, uDisplayName, uAvatarUrl sql.NullString
+		var uIsOnline sql.NullBool
+		var uLastSeen, uCreatedAt, uUpdatedAt sql.NullTime
+
+		err := rows.Scan(
+			&msg.ID, &msg.ChannelID, &msg.UserID, &msg.Content, 
+			&msg.MessageType, &pMsgID, &msg.IsEdited, 
+			&msg.IsDeleted, &msg.CreatedAt, &msg.UpdatedAt,
+
+			&uID, &uEmail, &uUsername, &uDisplayName, &uAvatarUrl, &uIsOnline,
+			&uLastSeen, &uCreatedAt, &uUpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("%s: failed to scan row: %w", operation, err)
+		}
+
+		if pMsgID.Valid {
+			msg.ParentMessageID = pMsgID.String
+		}
+
+		var user *core.ForumUser
+		if uID.Valid {
+			user = &core.ForumUser{
+				ID: uID.String,
+				Email:       uEmail.String,
+				Username:    uUsername.String,
+				DisplayName: uDisplayName.String,
+				AvatarUrl:   uAvatarUrl,
+				IsOnline:    uIsOnline.Bool,
+				LastSeen:    uLastSeen.Time,
+				CreatedAt:   uCreatedAt.Time,
+				UpdatedAt:   uUpdatedAt.Time,
+			}
+		}
+
+		messages = append(messages, core.ForumMessageWithUser{
+			Message: msg,
+			User: user,
+		})
+	}
+
+	if messages == nil {
+		messages = []core.ForumMessageWithUser{}
+	}
+
+	return messages, nil
+
+	/* isMember, err := r.IsChannelMember(ctx, channelID, userID)
+	if err != nil {
+		slog.Error(operation+" IsChannelMember failed",
+			"error", err, "userID", userID, "channelID", channelID)
+		return nil, fmt.Errorf("%s: access check failed: %w", operation, err)
+	}
+	if !isMember {
+		slog.Warn(operation+" access denied",
+			"userID", userID, "channelID", channelID)
+		return nil, fmt.Errorf("%s: access denied", operation)
+	}
 
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, channel_id, user_id, content, message_type, parent_message_id, 
@@ -201,10 +401,10 @@ func (r *ForumUserRepository) GetChannelMessages(
         ORDER BY created_at ASC
 	`, channelID)
 	if err != nil {
-        slog.Error(operation+" query failed", 
-            "error", err, "channelID", channelID)
-        return nil, fmt.Errorf("%s: database query failed: %w", operation, err)
-    }
+		slog.Error(operation+" query failed",
+			"error", err, "channelID", channelID)
+		return nil, fmt.Errorf("%s: database query failed: %w", operation, err)
+	}
 	defer rows.Close()
 
 	var msgs []core.ForumMessage
@@ -216,10 +416,10 @@ func (r *ForumUserRepository) GetChannelMessages(
 			&m.ID, &m.ChannelID, &m.UserID, &m.Content, &m.MessageType,
 			&parentMessageID, &m.IsEdited, &m.IsDeleted, &m.CreatedAt, &m.UpdatedAt,
 		)
-		 if err != nil {
-            slog.Error(operation+" row scan failed", "error", err)
-            return nil, fmt.Errorf("%s: failed to scan row: %w", operation, err)
-        }
+		if err != nil {
+			slog.Error(operation+" row scan failed", "error", err)
+			return nil, fmt.Errorf("%s: failed to scan row: %w", operation, err)
+		}
 
 		if parentMessageID.Valid {
 			m.ParentMessageID = parentMessageID.String
@@ -229,15 +429,15 @@ func (r *ForumUserRepository) GetChannelMessages(
 	}
 
 	if err := rows.Err(); err != nil {
-        slog.Error(operation+" rows iteration failed", "error", err)
-        return nil, fmt.Errorf("%s: rows iteration failed: %w", operation, err)
-    }
+		slog.Error(operation+" rows iteration failed", "error", err)
+		return nil, fmt.Errorf("%s: rows iteration failed: %w", operation, err)
+	}
 
 	if msgs == nil {
 		msgs = []core.ForumMessage{}
 	}
 
-	return msgs, nil
+	return msgs, nil */
 }
 
 func (r *ForumUserRepository) GetPublicChannelMessages(
@@ -261,14 +461,14 @@ func (r *ForumUserRepository) GetPublicChannelMessages(
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT 
-			fm.id, fm.channel_id, fm.user_id, fm.content, fm.message_type, 
+		SELECT
+			fm.id, fm.channel_id, fm.user_id, fm.content, fm.message_type,
 			fm.parent_message_id, fm.is_edited, fm.is_deleted, fm.created_at, fm.updated_at,
 
 			fu.id, fu.email, fu.username, fu.display_name, fu.avatar_url, fu.is_online,
 			fu.last_seen, fu.created_at, fu.updated_at,
 
-			pf.id, pf.channel_id, pf.user_id, pf.content, pf.message_type, 
+			pf.id, pf.channel_id, pf.user_id, pf.content, pf.message_type,
 			pf.parent_message_id, pf.is_edited, pf.is_deleted, pf.created_at, pf.updated_at,
 
 			pfu.id, pfu.email, pfu.username, pfu.display_name, pfu.avatar_url, pfu.is_online,

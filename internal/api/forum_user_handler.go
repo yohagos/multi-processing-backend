@@ -18,8 +18,10 @@ type ForumUserService interface {
 	Update(ctx context.Context, user *core.ForumUser) error
 	IsChannelMember(ctx context.Context, channelID, userID string) (bool, error)
 	RegisterOrLogin(ctx context.Context, email, username string) (*core.ForumUser, error)
-	GetUserChannels(ctx context.Context, userID string) ([]core.ForumChannel, error)
-	GetChannelMessages(ctx context.Context, channelID, userID string) ([]core.ForumMessage, error)
+	//GetUserChannels(ctx context.Context, userID string) ([]core.ForumChannel, error)
+	//GetChannelMessages(ctx context.Context, channelID, userID string) ([]core.ForumMessage, error)
+	GetUserChannels(ctx context.Context, userID string, messageLimit int) ([]core.ForumChannelWithLastMessages, error)
+	GetChannelMessages(ctx context.Context, channelID, userID string, limit, offset int) ([]core.ForumMessageWithUser, error)
 	CreateMessage(ctx context.Context, channelID, userID, content, parentMessageId string) (*core.ForumMessage, error)
 	MarkMessagesAsRead(ctx context.Context, channelID, userID string) error
 	GetPublicChannelMessages(ctx context.Context, page, limit int) (*core.ForumChannelMessages, error)
@@ -180,10 +182,11 @@ func (h *ForumUserHandler) GetPublicChannelMessages(c *gin.Context) {
 
 func (h *ForumUserHandler) GetUserChannels(c *gin.Context) {
 	userID := c.Param("userID")
+	messageLimit, err := strconv.Atoi(c.DefaultQuery("messageLimit", "30"))
 
 	slog.Info("\nForumHandler | \nGetUserChannels() | UserID received", "id", userID)
 
-	channels, err := h.service.GetUserChannels(c.Request.Context(), userID)
+	channels, err := h.service.GetUserChannels(c.Request.Context(), userID, messageLimit)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -197,13 +200,15 @@ func (h *ForumUserHandler) GetUserChannels(c *gin.Context) {
 func (h *ForumUserHandler) GetChannelMessages(c *gin.Context) {
 	channelID := c.Param("id")
 	userID := c.Query("userID")
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "30"))
 
 	if userID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "userID query paramter required"})
 		return
 	}
 
-	messages, err := h.service.GetChannelMessages(c.Request.Context(), channelID, userID)
+	messages, err := h.service.GetChannelMessages(c.Request.Context(), channelID, userID, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

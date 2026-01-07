@@ -13,8 +13,10 @@ type ForumUserRepository interface {
 	Update(ctx context.Context, user *core.ForumUser) error
 	IsChannelMember(ctx context.Context, channelID, userID string) (bool, error)
 	RegisterOrLogin(ctx context.Context, email, username string) (*core.ForumUser, error)
-	GetUserChannels(ctx context.Context, userID string) ([]core.ForumChannel, error)
-	GetChannelMessages(ctx context.Context, channelID, userID string) ([]core.ForumMessage, error)
+	//GetUserChannels(ctx context.Context, userID string) ([]core.ForumChannel, error)
+	GetUserChannels(ctx context.Context, userID string, messageLimit int) ([]core.ForumChannelWithLastMessages, error)
+	//GetChannelMessages(ctx context.Context, channelID, userID string) ([]core.ForumMessage, error)
+	GetChannelMessages(ctx context.Context, channelID, userID string, limit, offset int) ([]core.ForumMessageWithUser, error)
 	CreateMessage(ctx context.Context, channelID, userID, content, parentMessageID string) (*core.ForumMessage, error)
 	MarkMessagesAsRead(ctx context.Context, channelID, userID string) error
 	GetPublicChannelMessages(ctx context.Context, page, limit int) (*core.ForumChannelMessages, error)
@@ -63,12 +65,12 @@ func (s *ForumUserService) RegisterOrLogin(ctx context.Context, username, email 
 	return s.repo.RegisterOrLogin(ctx, username, email)
 }
 
-func (s *ForumUserService) GetUserChannels(ctx context.Context, userID string) ([]core.ForumChannel, error) {
-	return s.repo.GetUserChannels(ctx, userID)
+func (s *ForumUserService) GetUserChannels(ctx context.Context, userID string, messageLimit int) ([]core.ForumChannelWithLastMessages, error) {
+	return s.repo.GetUserChannels(ctx, userID, messageLimit)
 }
 
-func (s *ForumUserService) GetChannelMessages(ctx context.Context, channelID, userID string) ([]core.ForumMessage, error) {
-	return s.repo.GetChannelMessages(ctx, channelID, userID)
+func (s *ForumUserService) GetChannelMessages(ctx context.Context, channelID, userID string, limit, offset int) ([]core.ForumMessageWithUser, error) {
+	return s.repo.GetChannelMessages(ctx, channelID, userID, limit, offset)
 }
 
 func (s *ForumUserService) CreateMessage(ctx context.Context, channelID, userID, content, parentMessageID string) (*core.ForumMessage, error) {
