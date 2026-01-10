@@ -1,4 +1,4 @@
-package db
+package websockets
 
 import (
 	"sync"
@@ -6,27 +6,25 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// WebSocket Hub
-
 type Client struct {
 	ID        string
-	UserId    string
+	UserID    string
 	ChannelID string
 	Conn      *websocket.Conn
 	Send      chan []byte
 }
 
-type Message struct {
-	ChannelID string `json:"channel_id"`
-	UserID    string `json:"user_id"`
-	Type      string `json:"type"`
-	Payload   []byte `json:"payload"`
+type BroadcastMessage struct {
+	ChannelID string
+	UserID    string
+	Type      string
+	Payload   []byte
 }
 
 type Hub struct {
 	clients    map[string]map[string]*Client
-	broadcast  chan Message
-	register   chan *Client
+	broadcast  chan BroadcastMessage
+	Register   chan *Client
 	unregister chan *Client
 	mu         sync.RWMutex
 }
@@ -34,8 +32,8 @@ type Hub struct {
 func NewHub() *Hub {
 	return &Hub{
 		clients:    make(map[string]map[string]*Client),
-		broadcast:  make(chan Message),
-		register:   make(chan *Client),
+		broadcast:  make(chan BroadcastMessage),
+		Register:   make(chan *Client),
 		unregister: make(chan *Client),
 	}
 }
@@ -43,13 +41,16 @@ func NewHub() *Hub {
 func (h *Hub) Run() {
 	for {
 		select {
-		case client := <-h.register:
+		case client := <-h.Register:
 			h.mu.Lock()
 			if _, exists := h.clients[client.ChannelID]; !exists {
 				h.clients[client.ChannelID] = make(map[string]*Client)
 			}
 			h.clients[client.ChannelID][client.ID] = client
 			h.mu.Unlock()
+			go client.writePump(h)
+			go client.readPump(h)
+
 		case client := <-h.unregister:
 			h.mu.Lock()
 			if channelClients, exists := h.clients[client.ChannelID]; exists {
@@ -62,6 +63,7 @@ func (h *Hub) Run() {
 				}
 			}
 			h.mu.Unlock()
+
 		case message := <-h.broadcast:
 			h.mu.RLock()
 			if channelClients, exists := h.clients[message.ChannelID]; exists {
@@ -81,13 +83,52 @@ func (h *Hub) Run() {
 }
 
 func (h *Hub) BroadcastToChannel(channelID string, message []byte) {
-	h.broadcast <- Message{
+	h.broadcast <- BroadcastMessage{
 		ChannelID: channelID,
-		Payload: message,
+		Payload:   message,
 	}
 }
 
-func (h *Hub) GetChannelClients(channelID string) []*Client {
+func (c *Client) writePump(h *Hub) {
+	defer func() {
+		c.Conn.Close()
+		h.unregister <- c
+	}()
+
+	for message := range c.Send {
+		w, err := c.Conn.NextWriter(websocket.TextMessage)
+		if err != nil {
+			return
+		}
+
+		if _, err := w.Write(message); err != nil {
+			return
+		}
+
+		if err := w.Close(); err != nil {
+			return
+		}
+	}
+
+}
+
+func (c *Client) readPump(h *Hub) {
+	defer func() {
+		h.unregister <- c
+		c.Conn.Close()
+	}()
+
+	for {
+		_, message, err := c.Conn.ReadMessage()
+		if err != nil {
+			break
+		}
+
+		h.BroadcastToChannel(c.ChannelID, message)
+	}
+}
+
+/* func (h *Hub) GetChannelClients(channelID string) []*Client {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -98,4 +139,4 @@ func (h *Hub) GetChannelClients(channelID string) []*Client {
 		}
 	}
 	return clients
-}
+} */
