@@ -14,7 +14,7 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-var upgrader = websocket.Upgrader{
+var Upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
@@ -82,7 +82,7 @@ func (h *CryptoHandler) CreateCrypto(c *gin.Context) {
 }
 
 func (h *CryptoHandler) HandleCryptoWS(c *gin.Context) {
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := Upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		slog.Error("Websocket upgrade faailed", "error", err)
 		return
