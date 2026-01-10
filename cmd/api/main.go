@@ -13,6 +13,7 @@ import (
 	"multi-processing-backend/internal/configs"
 	"multi-processing-backend/internal/db"
 	"multi-processing-backend/internal/services"
+	"multi-processing-backend/internal/websockets"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/exp/slog"
@@ -33,6 +34,9 @@ func main() {
 		log.Fatal("Seeding failed", err)
 		os.Exit(100)
 	}
+
+	wsHub := websockets.NewHub()
+	go wsHub.Run()
 
 	userRepo := db.NewUserRepository(pool)
 	userService := services.NewUserService(userRepo)
@@ -64,8 +68,8 @@ func main() {
 
 	forumRepo := db.NewForumUserRepository(pool)
 	forumRepo.CreatePublicChannel(ctx)
-	forumService := services.NewForumUserService(forumRepo)
-	forumHandler := api.NewForumUserHandler(forumService)
+	forumService := services.NewForumUserService(forumRepo, wsHub)
+	forumHandler := api.NewForumUserHandler(forumService, wsHub)
 
 	go cryptoService.StartPriceTicker(ctx)
 
