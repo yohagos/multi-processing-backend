@@ -2,8 +2,10 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 
 	"multi-processing-backend/internal/core"
+	"multi-processing-backend/internal/websockets"
 )
 
 type ForumUserRepository interface {
@@ -31,14 +33,24 @@ type ForumUserRepository interface {
 	DeleteMessage(ctx context.Context, messageID, userID string) error
 	AddReaction(ctx context.Context, messageID, userID, emoji string) error
 	RemoveReaction(ctx context.Context, messageID, userID, emoji string) error
+
+	CreateHubMessage(ctx context.Context, channelID, userID, content, parentMessageID string) (*core.ForumMessage, error)
+	GetMessageWithUser(ctx context.Context, msgID string) (*core.ForumMessageWithUser, error)
 }
 
 type ForumUserService struct {
-	repo ForumUserRepository
+	repo  ForumUserRepository
+	wsHub *websockets.Hub
 }
 
-func NewForumUserService(repo ForumUserRepository) *ForumUserService {
-	return &ForumUserService{repo: repo}
+func NewForumUserService(
+	repo ForumUserRepository, 
+	wsHub *websockets.Hub,
+) *ForumUserService {
+	return &ForumUserService{
+		repo: repo,
+		wsHub: wsHub,
+	}
 }
 
 func (s *ForumUserService) GetByID(ctx context.Context, id string) (*core.ForumUser, error) {
@@ -77,6 +89,55 @@ func (s *ForumUserService) CreateMessage(ctx context.Context, channelID, userID,
 	return s.repo.CreateMessage(ctx, channelID, userID, content, parentMessageID)
 }
 
+func (s *ForumUserService) CreateHubMessage(
+	ctx context.Context,
+	channelID, userID, content, parentMessageID string,
+) (*core.ForumMessage, error) {
+	message, err := s.repo.CreateHubMessage(ctx, channelID, userID, content, parentMessageID)
+	if err != nil {
+		return  nil, err
+	}
+
+	if s.wsHub != nil {
+		messageWithUser, err := s.repo.GetMessageWithUser(ctx, message.ID)
+		if err == nil {
+			wsMessage, err := json.Marshal(map[string]interface{}{
+				"type": "NEW_MESSAGE",
+				"channel": channelID,
+				"message": messageWithUser,
+			})
+			if err == nil {
+				s.wsHub.BroadcastToChannel(channelID, wsMessage)
+			}
+		}
+	}
+	return message, nil
+}
+
+func (s *ForumUserService) UpdateUserPresence(
+	ctx context.Context, 
+	userID string, 
+	isOnline bool,
+) error {
+	err := s.repo.UpdateUserPresence(ctx, userID, isOnline)
+	if err != nil {
+		return err
+	}
+
+	if s.wsHub != nil {
+		presenceMessage, err := json.Marshal(map[string]interface{}{
+			"type":     "USER_PRESENCE",
+			"userID":   userID,
+			"isOnline": isOnline,
+		})
+		if err == nil {
+			s.wsHub.BroadcastToChannel("presence", presenceMessage)
+		}
+	}
+
+	return nil
+}
+
 func (s *ForumUserService) MarkMessagesAsRead(ctx context.Context, channelID, userID string) error {
 	return s.repo.MarkMessagesAsRead(ctx, channelID, userID)
 }
@@ -101,9 +162,9 @@ func (s *ForumUserService) GetUnreadCount(ctx context.Context, userID string) (m
 	return s.repo.GetUnreadCount(ctx, userID)
 }
 
-func (s *ForumUserService) UpdateUserPresence(ctx context.Context, userID string, isOnline bool) error {
+/* func (s *ForumUserService) UpdateUserPresence(ctx context.Context, userID string, isOnline bool) error {
 	return s.repo.UpdateUserPresence(ctx, userID, isOnline)
-}
+} */
 
 func (s *ForumUserService) GetChannelMembers(ctx context.Context, channelID string) ([]core.ForumUser, error) {
 	return s.repo.GetChannelMembers(ctx, channelID)

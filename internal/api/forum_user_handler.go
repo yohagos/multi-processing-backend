@@ -6,9 +6,11 @@ import (
 	"strconv"
 
 	"multi-processing-backend/internal/core"
+	"multi-processing-backend/internal/websockets"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/exp/slog"
+	"github.com/google/uuid"
 )
 
 type ForumUserService interface {
@@ -40,10 +42,17 @@ type ForumUserService interface {
 
 type ForumUserHandler struct {
 	service ForumUserService
+	wsHub   *websockets.Hub
 }
 
-func NewForumUserHandler(service ForumUserService) *ForumUserHandler {
-	return &ForumUserHandler{service: service}
+func NewForumUserHandler(
+	service ForumUserService,
+	wsHub *websockets.Hub,
+) *ForumUserHandler {
+	return &ForumUserHandler{
+		service: service,
+		wsHub:   wsHub,
+	}
 }
 
 func RegisterForumUserRoutes(rg *gin.RouterGroup, h *ForumUserHandler) {
@@ -80,6 +89,11 @@ func RegisterForumUserRoutes(rg *gin.RouterGroup, h *ForumUserHandler) {
 		messages.DELETE("/:id", h.DeleteMessage)
 		messages.POST("/:id/reactions", h.AddReaction)
 		messages.DELETE("/:id/reactions", h.RemoveReaction)
+	}
+
+	ws := rg.Group("/ws")
+	{
+		ws.GET("/:channelID", h.HandleForumWebSocket)
 	}
 }
 
@@ -428,4 +442,34 @@ func (h *ForumUserHandler) RemoveReaction(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusAccepted, err)
+}
+
+func (h *ForumUserHandler) HandleForumWebSocket(c *gin.Context) {
+	channelID := c.Param("channelID")
+	userID := c.Query("userID")
+
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "userID query parameter required"})
+		return
+	}
+
+	conn, err := Upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "could not open websocket connection"})
+		return
+	}
+
+	client := &websockets.Client{
+		ID:        generateClientID(),
+		UserID:    userID,
+		ChannelID: channelID,
+		Conn:      conn,
+		Send:      make(chan []byte, 256),
+	}
+
+	h.wsHub.Register <- client
+}
+
+func generateClientID() string {
+	return uuid.New().String()
 }

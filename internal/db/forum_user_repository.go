@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/exp/slog"
@@ -904,6 +905,111 @@ func (r *ForumUserRepository) CreatePublicChannel(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (r *ForumUserRepository) CreateHubMessage(
+	ctx context.Context,
+	channelID, userID, content, parentMessageID string,
+) (*core.ForumMessage, error) {
+	messageID := uuid.New().String()
+	now := time.Now()
+
+	var parentID interface{}
+	if parentMessageID != "" {
+		parentID = parentMessageID
+	} else {
+		parentID = nil
+	}
+
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO forum_messages (
+			id, channel_id, user_id, content, 
+			message_type, parent_message_id, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, 'TEXT', $5, $6, $6)
+	`, messageID, channelID, userID, content, parentID, now)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &core.ForumMessage{
+		ID:              messageID,
+		ChannelID:       channelID,
+		UserID:          userID,
+		Content:         content,
+		MessageType:     "TEXT",
+		ParentMessageID: parentMessageID,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}, nil
+}
+
+func (r *ForumUserRepository) GetMessageWithUser(
+	ctx context.Context,
+	messageID string,
+) (*core.ForumMessageWithUser, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT 
+			fm.id, fm.channel_id, fm.user_id, fm.content, 
+			fm.message_type, fm.parent_message_id, fm.is_edited, 
+			fm.is_deleted, fm.created_at, fm.updated_at,
+			
+			fu.id, fu.email, fu.username, fu.display_name, 
+			fu.avatar_url, fu.is_online, fu.last_seen, 
+			fu.created_at, fu.updated_at
+		FROM forum_messages fm
+		JOIN forum_users fu ON fm.user_id = fu.id
+		WHERE fm.id = $1
+	`, messageID)
+
+	var msg core.ForumMessage
+	var parentMsgID sql.NullString
+	
+	var userID sql.NullString
+	var userEmail sql.NullString
+	var userUsername sql.NullString
+	var userDisplayName sql.NullString
+	var userAvatar sql.NullString
+	var userIsOnline sql.NullBool
+	var userLastSeen sql.NullTime
+	var userCreatedAt, userUpdatedAt sql.NullTime
+
+	err := row.Scan(
+		&msg.ID, &msg.ChannelID, &msg.UserID, &msg.Content, 
+		&msg.MessageType, &parentMsgID, &msg.IsEdited, 
+		&msg.IsDeleted, &msg.CreatedAt, &msg.UpdatedAt,
+		
+		&userID, &userEmail, &userUsername, &userDisplayName, 
+		&userAvatar, &userIsOnline, &userLastSeen, 
+		&userCreatedAt, &userUpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if parentMsgID.Valid {
+		msg.ParentMessageID = parentMsgID.String
+	}
+
+	var user *core.ForumUser
+	if userID.Valid {
+		user = &core.ForumUser{
+			ID:          userID.String,
+			Email:       userEmail.String,
+			Username:    userUsername.String,
+			DisplayName: userDisplayName.String,
+			AvatarUrl:   userAvatar,
+			IsOnline:    userIsOnline.Bool,
+			LastSeen:    userLastSeen.Time,
+			CreatedAt:   userCreatedAt.Time,
+			UpdatedAt:   userUpdatedAt.Time,
+		}
+	}
+
+	return &core.ForumMessageWithUser{
+		Message: msg,
+		User:    user,
+	}, nil
 }
 
 func (r *ForumUserRepository) createAdminUser(ctx context.Context) string {
